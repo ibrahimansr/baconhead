@@ -115,22 +115,50 @@ class GameSense(nn.Module):
 # ── Save / Load ──────────────────────────────────────────────────────────────
 
 
-def save_game_sense(model: GameSense, path: str):
+def save_game_sense(
+    model: "GameSense",
+    path: str,
+    ref_model: Optional["GameSense"] = None,
+    dpo: bool = False,
+):
+    """
+    Save a GameSense checkpoint.  If *ref_model* is provided (e.g. after DPO
+    training) its state_dict is embedded under 'ref_model_state' so future
+    DPO rounds can warm-start from the correct reference.
+    """
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    torch.save(
-        {
-            "model_state": model.state_dict(),
-            "backbone": model._backbone,
-            "num_states": model._num_states,
-        },
-        path,
-    )
-    print(f"[game_sense] Saved → {path}", flush=True)
+    payload = {
+        "model_state": model.state_dict(),
+        "backbone": model._backbone,
+        "num_states": model._num_states,
+        "dpo": dpo,
+    }
+    if ref_model is not None:
+        payload["ref_model_state"] = ref_model.state_dict()
+    torch.save(payload, path)
+    print(f"[game_sense] Saved → {path}" + (" (DPO)" if dpo else ""), flush=True)
 
 
 def load_game_sense(
-    path: str, device: Optional[torch.device] = None
-) -> GameSense:
+    path: str,
+    device: Optional[torch.device] = None,
+    load_ref: bool = False,
+):
+    """
+    Load a GameSense checkpoint.
+
+    Args:
+        path:     path to .pt file
+        device:   target device (auto-detected if None)
+        load_ref: if True and checkpoint contains a reference model state
+                  (saved after DPO training), also return it as a second
+                  value: ``(policy, ref)`` — both on *device*.
+                  If no ref is stored, the second value is None.
+
+    Returns:
+        GameSense  when load_ref is False
+        (GameSense, GameSense | None)  when load_ref is True
+    """
     if device is None:
         device = torch.device(
             "cuda"
@@ -140,14 +168,27 @@ def load_game_sense(
             else "cpu"
         )
     ckpt = torch.load(path, map_location=device, weights_only=False)
-    model = GameSense(
-        backbone=ckpt.get("backbone", "google/vit-base-patch16-224"),
-        num_states=ckpt.get("num_states", NUM_STATES),
-    )
+    backbone = ckpt.get("backbone", "google/vit-base-patch16-224")
+    num_states = ckpt.get("num_states", NUM_STATES)
+
+    model = GameSense(backbone=backbone, num_states=num_states)
     model.load_state_dict(ckpt["model_state"])
     model.to(device)
     model.eval()
-    return model
+
+    if not load_ref:
+        return model
+
+    ref = None
+    if "ref_model_state" in ckpt:
+        ref = GameSense(backbone=backbone, num_states=num_states)
+        ref.load_state_dict(ckpt["ref_model_state"])
+        ref.to(device)
+        ref.eval()
+        for p in ref.parameters():
+            p.requires_grad = False
+
+    return model, ref
 
 
 # ── Heuristic fallback (no trained model) ────────────────────────────────────

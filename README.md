@@ -56,7 +56,7 @@ macos only rn. needs accessibility permission for keyboard/mouse control:
 
 ---
 
-## train GameSense
+## train GameSense (classification)
 
 collect data by playing roblox (auto-labels frames from your gameplay):
 
@@ -71,6 +71,39 @@ python -m vision.train --data game_data --out game_sense.pt --epochs 10
 ```
 
 prints per-class precision/recall when done. more data = better model.
+
+---
+
+## DPO fine-tuning (bake reward into weights)
+
+after collecting gameplay data, run DPO to fold the reward signal
+directly into the model weights — no separate reward model needed at inference time.
+
+the preference signal comes from observed gameplay outcomes:
+`playing > danger > menu > dead`
+(chosen = frames from better states, rejected = frames from worse states).
+
+```bash
+# fine-tune existing game_sense.pt in-place
+python run_dpo.py --data episode_data --model game_sense.pt --epochs 3
+
+# save to a separate file instead
+python run_dpo.py --data episode_data --model game_sense.pt \
+    --out game_sense_dpo.pt --epochs 5 --beta 0.1
+
+# smoke-test without saving
+python run_dpo.py --data episode_data --model game_sense.pt --dry-run
+```
+
+the resulting checkpoint embeds a frozen **reference model** alongside the policy,
+so future DPO rounds stay anchored to the original distribution (`--beta` controls
+how far the policy can drift).
+
+use the DPO-tuned model with the bot exactly as before:
+
+```bash
+python run_takeover.py --model game_sense.pt
+```
 
 ---
 
