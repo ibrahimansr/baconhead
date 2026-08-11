@@ -1,10 +1,14 @@
-mss>=9.0.0
+# baconhead — latent world model + imitation prior + Claude (Python 3.13, macOS)
+pyobjc-framework-Quartz>=10.0   # CGEventTap, CGEvent injection, window list, clock
+mss>=9.0.0                      # screen capture
 numpy>=1.24.0
-torch>=2.0.0
-transformers>=4.30.0
 pillow>=9.0.0
-pynput>=1.7.0
-pyautogui>=0.9.0
-anthropic>=0.20.0
+torch>=2.2.0                    # the world model
+anthropic>=0.40.0               # Claude — goals, plan selection, reward
 python-dotenv>=1.0.0
-# DPO training uses pure PyTorch — no extra dependencies needed
+
+# Only needed for --hf imitation pretraining (wm/data.py:load_hf):
+#   pip install datasets
+
+# Cloud training (wm/modal_train.py):
+#   pip install modal && modal setup

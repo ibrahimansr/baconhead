@@ -7,21 +7,14 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Model weights
+# World model weights
 *.pt
 *.pth
-*.onnx
 
-# Training data
-game_data/
-episode_data/
-policy_data/
-reward_data/
-recording_frames/
-look_calib_shots/
+# Recorded episodes (human demos + agent runs)
+demos/
 
 # Logs
-bot_log.tsv
 *.log
 
 # macOS
@@ -30,3 +23,6 @@ bot_log.tsv
 # IDE
 .idea/
 .vscode/
+
+# Personal design notes
+DESIGN.md
