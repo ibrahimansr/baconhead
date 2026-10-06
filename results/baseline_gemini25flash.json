@@ -1,0 +1,82 @@
+{
+  "obby/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.05333333333333334,
+    "latency_s": 1.1900306431452434,
+    "errors": 0
+  },
+  "brainrot/google/gemini-2.5-flash": {
+    "mean": 2.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.2692549848556518,
+    "errors": 0
+  },
+  "adoptme/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0033333333333333335,
+    "latency_s": 1.2251860006650288,
+    "errors": 0
+  },
+  "disaster/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.006666666666666667,
+    "latency_s": 1.2405581911404928,
+    "errors": 0
+  },
+  "garden/google/gemini-2.5-flash": {
+    "mean": 1.3010299956639813,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.2096549693743388,
+    "errors": 0
+  },
+  "forest/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0033333333333333335,
+    "latency_s": 1.2754755051930746,
+    "errors": 0
+  },
+  "mm2/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.2645370372136433,
+    "errors": 0
+  },
+  "doors/google/gemini-2.5-flash": {
+    "mean": 1.5,
+    "sem": 0.35355339059327373,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.0582180841763815,
+    "errors": 0
+  },
+  "rivals/google/gemini-2.5-flash": {
+    "mean": -5.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0033333333333333335,
+    "latency_s": 1.1696056540807087,
+    "errors": 0
+  },
+  "fisch/google/gemini-2.5-flash": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.262227656841278,
+    "errors": 0
+  }
+}

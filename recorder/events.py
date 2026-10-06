@@ -9,7 +9,6 @@ from typing import Callable, Deque, Optional
 
 import Quartz
 
-from core.clock import mach_ticks_to_ns
 
 AGENT_USERDATA_MAGIC = 0x7BAC04   # the injector stamps this into every event it posts, so agent input never gets read as yours
 
@@ -133,13 +132,6 @@ class InputRecorder:
         with self._lock:
             self._buf.clear()
 
-    def recent(self, window_ns: int) -> list[InputEvent]:
-        """The last window of events, for answering what exactly preceded a death."""
-        from core.clock import now_ns
-        cutoff = now_ns() - window_ns
-        with self._lock:
-            return [e for e in self._buf if e.t_ns >= cutoff]
-
     def _callback(self, proxy, type_, event, refcon):
         try:
             ev = self._decode(type_, event)
@@ -158,7 +150,7 @@ class InputRecorder:
                 Quartz.CGEventTapEnable(self._tap, True)   # macOS disables a slow tap, so it has to be turned back on
             return None
 
-        t_ns = mach_ticks_to_ns(Quartz.CGEventGetTimestamp(event))   # the same units as our frame timestamps
+        t_ns = Quartz.CGEventGetTimestamp(event)   # already nanoseconds on the clock now_ns() reads (measured: ratio 1.0000); not mach ticks
         user_data = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGEventSourceUserData)
         source = "agent" if user_data == AGENT_USERDATA_MAGIC else "human"
 
@@ -186,17 +178,3 @@ class InputRecorder:
             return InputEvent(t_ns=t_ns, kind="scroll", source=source, dy=dy)
 
         return None
-
-
-if __name__ == "__main__":
-    import time
-    print("Starting input recorder for 6s — type/move the mouse in any window.")
-    rec = InputRecorder()
-    rec.start()
-    time.sleep(6)
-    evs = rec.snapshot()
-    rec.stop()
-    print(f"Captured {len(evs)} events.")
-    for e in evs[:20]:
-        print(f"  +{e.t_ns/1e6:10.2f}ms  {e.kind:11s} {e.source:5s} "
-              f"key={e.key} btn={e.button} d=({e.dx},{e.dy})")

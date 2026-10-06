@@ -60,30 +60,3 @@ class FrameSource:
             self._sct.close()
         except Exception:
             pass
-
-    def __enter__(self) -> "FrameSource":
-        return self
-
-    def __exit__(self, *exc) -> None:
-        self.close()
-
-
-def measure_fps(seconds: float = 2.0, region: Optional[Region] = None) -> float:
-    """What this machine can actually capture, which caps how fast the agent can react."""
-    import time
-    src = FrameSource(region=region)
-    n, t0 = 0, time.monotonic()
-    while time.monotonic() - t0 < seconds:
-        src.grab()
-        n += 1
-    src.close()
-    return n / (time.monotonic() - t0)
-
-
-if __name__ == "__main__":
-    src = FrameSource.for_roblox()
-    print(f"Region: {src.region}")
-    f = src.grab()
-    print(f"Frame seq={f.seq} t={f.t_ns/1e6:.1f}ms shape={f.rgb.shape} dtype={f.rgb.dtype}")
-    src.close()
-    print(f"Capture throughput: {measure_fps(1.5):.1f} FPS")

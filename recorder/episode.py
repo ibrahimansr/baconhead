@@ -18,7 +18,7 @@ if TYPE_CHECKING:   # only a type annotation, and importing it for real would dr
 class EpisodeWriter:
     out_dir: str
     region: Optional[dict] = None
-    store_size: int = 256   # frames go to disk downscaled, so a few minutes of play stays a manageable array
+    store_wh: tuple = (448, 252)   # the model's input size (model/vlm.OBS_W, OBS_H), 16:9 like the Roblox window
     _frames: list = field(default_factory=list, init=False)
     _pts: list = field(default_factory=list, init=False)
     _events_fp: object = field(default=None, init=False)
@@ -31,25 +31,16 @@ class EpisodeWriter:
 
     def add_frame(self, rgb: np.ndarray, t_ns: int) -> None:
         small = np.asarray(
-            Image.fromarray(rgb).resize((self.store_size, self.store_size), Image.Resampling.BILINEAR),
+            Image.fromarray(rgb).resize(self.store_wh, Image.Resampling.BOX) if rgb.shape[1::-1] != tuple(self.store_wh) else rgb,
             dtype=np.uint8,
         )
         self._frames.append(small)
         self._pts.append(int(t_ns))
 
-    def add_event(self, ev: InputEvent) -> None:
-        self._events_fp.write(json.dumps(ev.to_dict()) + "\n")
-
     def add_events(self, evs: list[InputEvent]) -> None:
         for ev in evs:
             self._events_fp.write(json.dumps(ev.to_dict()) + "\n")
         self._events_fp.flush()   # flushed as we go so a Ctrl+C still leaves a readable episode
-
-    def add_tag(self, t_ns: int, kind: str, **data) -> None:
-        """Mark something meaningful on the timeline: a death, a checkpoint, a respawn."""
-        rec = {"t_ns": int(t_ns), "kind": kind, **data}
-        self._tags_fp.write(json.dumps(rec) + "\n")
-        self._tags_fp.flush()
 
     def close(self, extra_meta: Optional[dict] = None) -> str:
         from core.clock import _NUMER, _DENOM
@@ -57,7 +48,7 @@ class EpisodeWriter:
         frames = (
             np.stack(self._frames, axis=0)
             if self._frames
-            else np.empty((0, self.store_size, self.store_size, 3), dtype=np.uint8)
+            else np.empty((0, self.store_wh[1], self.store_wh[0], 3), dtype=np.uint8)
         )
         pts = np.array(self._pts, dtype=np.int64)
         np.save(os.path.join(self.out_dir, "frames.npy"), frames)
@@ -65,7 +56,7 @@ class EpisodeWriter:
 
         meta = {
             "n_frames": int(frames.shape[0]),
-            "store_size": self.store_size,
+            "store_wh": list(self.store_wh),
             "region": self.region,
             "clock_timebase": {"numer": _NUMER, "denom": _DENOM},   # recorded so timestamps stay interpretable on another machine
             "duration_ns": int(pts[-1] - pts[0]) if len(pts) > 1 else 0,
@@ -98,14 +89,6 @@ class Episode:
         with open(os.path.join(path, "meta.json")) as f:
             meta = json.load(f)
         return cls(frames=frames, frame_pts=pts, events=events, tags=tags, meta=meta)
-
-    def frame_index_at(self, t_ns: int) -> int:
-        """The frame nearest a timestamp, which is how a tag or a tick boundary finds its picture."""
-        return int(np.argmin(np.abs(self.frame_pts - t_ns)))
-
-    def events_between(self, t0_ns: int, t1_ns: int) -> list[dict]:
-        return [e for e in self.events if t0_ns <= e["t_ns"] <= t1_ns]
-
 
 def _read_jsonl(path: str) -> list[dict]:
     if not os.path.isfile(path):

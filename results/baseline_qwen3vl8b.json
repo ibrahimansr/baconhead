@@ -1,0 +1,232 @@
+{
+  "obby/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.986252751350403,
+    "errors": 0
+  },
+  "brainrot/qwen/qwen3-vl-8b-instruct": {
+    "mean": 2.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.9912677645683288,
+    "errors": 0
+  },
+  "adoptme/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.9101918919881185,
+    "errors": 0
+  },
+  "disaster/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.9500414085388185,
+    "errors": 0
+  },
+  "garden/qwen/qwen3-vl-8b-instruct": {
+    "mean": 1.3010299956639813,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.0,
+    "latency_s": 1.9559815899531046,
+    "errors": 0
+  },
+  "forest/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.013513513513513514,
+    "latency_s": 2.534227010366079,
+    "errors": 4
+  },
+  "mm2/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.013513513513513514,
+    "latency_s": 2.4955284184700735,
+    "errors": 4
+  },
+  "doors/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.013513513513513514,
+    "latency_s": 2.481644006194295,
+    "errors": 4
+  },
+  "rivals/qwen/qwen3-vl-8b-instruct": {
+    "mean": -7.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.013513513513513514,
+    "latency_s": 2.477298044675105,
+    "errors": 4
+  },
+  "fisch/qwen/qwen3-vl-8b-instruct": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2,
+    "parse_fail": 0.013513513513513514,
+    "latency_s": 2.472374569725346,
+    "errors": 4
+  },
+  "obby/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "obby/random": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "obby/expert": {
+    "mean": 16.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "brainrot/noop": {
+    "mean": 2.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "brainrot/random": {
+    "mean": 2.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "brainrot/expert": {
+    "mean": 2.24197961579964,
+    "sem": 0.011665868308598707,
+    "n": 2
+  },
+  "adoptme/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "adoptme/random": {
+    "mean": 0.5,
+    "sem": 0.35355339059327373,
+    "n": 2
+  },
+  "adoptme/expert": {
+    "mean": 3.5,
+    "sem": 0.35355339059327373,
+    "n": 2
+  },
+  "disaster/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "disaster/random": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "disaster/expert": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "garden/noop": {
+    "mean": 1.3010299956639813,
+    "sem": 0.0,
+    "n": 2
+  },
+  "garden/random": {
+    "mean": 1.3010299956639813,
+    "sem": 0.0,
+    "n": 2
+  },
+  "garden/expert": {
+    "mean": 1.7781512503836436,
+    "sem": 0.0,
+    "n": 2
+  },
+  "forest/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "forest/random": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "forest/expert": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "mm2/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "mm2/random": {
+    "mean": 0.5,
+    "sem": 0.35355339059327373,
+    "n": 2
+  },
+  "mm2/expert": {
+    "mean": 0.505,
+    "sem": 0.350017856687341,
+    "n": 2
+  },
+  "doors/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "doors/random": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "doors/expert": {
+    "mean": 17.0,
+    "sem": 2.1213203435596424,
+    "n": 2
+  },
+  "rivals/noop": {
+    "mean": -7.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "rivals/random": {
+    "mean": -7.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "rivals/expert": {
+    "mean": 4.5,
+    "sem": 1.0606601717798212,
+    "n": 2
+  },
+  "fisch/noop": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "fisch/random": {
+    "mean": 0.0,
+    "sem": 0.0,
+    "n": 2
+  },
+  "fisch/expert": {
+    "mean": 2.4386626322174854,
+    "sem": 0.18159848774308318,
+    "n": 2
+  }
+}

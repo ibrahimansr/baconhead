@@ -22,14 +22,10 @@ def _quartz_region() -> Optional[Region]:
             CGWindowListCopyWindowInfo,
             kCGWindowListExcludeDesktopElements,
             kCGNullWindowID,
-            CGDisplayBounds,
-            CGMainDisplayID,
         )
     except Exception:
         return None
     try:
-        bounds = CGDisplayBounds(CGMainDisplayID())
-        screen_height = int(getattr(bounds.size, "height", 1080))
         wl = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)   # sees Roblox even though System Events usually can't
         best, best_area = None, 0
         for w in wl or []:
@@ -95,23 +91,3 @@ def focus_roblox() -> bool:
         return out.returncode == 0 and "ok" in (out.stdout or "")
     except Exception:
         return False
-
-
-def focus_roblox_and_click() -> bool:
-    """Focus, then click the middle of the window, because many games ignore input until clicked."""
-    import time
-
-    if not focus_roblox():
-        return False
-    time.sleep(0.2)
-    region = get_roblox_region()
-    if region:
-        from control import inject
-
-        inject.click(region["left"] + region["width"] / 2, region["top"] + region["height"] / 2)
-        time.sleep(0.15)
-    return True
-
-
-if __name__ == "__main__":
-    print(get_roblox_region() or "Roblox window not found.")
