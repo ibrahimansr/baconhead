@@ -1,0 +1,19 @@
+{
+  "cmd": "/pkg/modal/_container_entrypoint.py",
+  "time": "2026-10-02 18:23:41",
+  "config": {
+    "model": "/vol/runs/sft_base",
+    "data": "/vol/data/sim_grpo",
+    "out": "/vol/runs/grpo_v3",
+    "generations": 8,
+    "batch": 8,
+    "grad_accum": 4,
+    "max_steps": 2000,
+    "lr": 1e-05,
+    "seed": 0,
+    "no_vllm": true,
+    "resume": false
+  },
+  "git_sha": "bc7b58d49a1d4e3ff266dd5ef4bf13a79055b8d5",
+  "git_dirty": true
+}

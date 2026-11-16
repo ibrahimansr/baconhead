@@ -26,3 +26,13 @@ demos/
 
 # Personal design notes
 DESIGN.md
+
+# Training runs and checkpoints
+runs/
+ckpts/
+
+# Local model/data dirs
+logs/
+data/
+models/
+artifacts/
