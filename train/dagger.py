@@ -3,7 +3,7 @@
 Why: SFT only ever saw states the expert visits. In closed loop the model drifts off them (walks onto the kill brick,
 faces a wall) and has never seen how to recover, so errors compound (Ross et al. 2011). The expert reads privileged sim
 state, so it can label any state, including the model's mistakes: this is on-policy distillation with a deterministic
-teacher, the cheapest dense signal there is. GRPO only goes on top of a policy that already survives closed loop.
+teacher, the cheapest dense signal there is. RL (train/rl.py) only goes on top of a policy that already survives closed loop.
 
     python -m train.dagger --model models/sft --base-data data/sim_sft --out runs/dagger --rounds 3
 
@@ -25,8 +25,8 @@ import time
 import numpy as np
 
 import sim
-from model.vlm import CHUNK, VLMRunner, encode, prompt
-from train.dataset import DECAY, _completion, _kw, keep_rows, save
+from model.vlm import CHUNK, VLMRunner, encode, prompt, target
+from train.dataset import DECAY, _completion, _kw, keep_rows, save, with_dir
 from train.eval import bench, rollouts
 
 LABEL_EVERY = 4   # ticks between labelled states; neighbours are near-duplicates and the expert lookahead is the cost
@@ -35,14 +35,15 @@ LABEL_EVERY = 4   # ticks between labelled states; neighbours are near-duplicate
 def expert_chunk(env) -> str:
     """The expert's next CHUNK inputs from exactly this state, played out on a copy."""
     e = pickle.loads(pickle.dumps(env))
-    start, acts = e.cursor, []
+    start, acts, plan = e.cursor, [], None
     for _ in range(CHUNK):
         acts.append(e.expert())
+        plan = with_dir(e, acts[-1], e.plan) if plan is None else plan   # this state's plan, before the copy moves on
         e.step(acts[-1])
         if e.done:
             break
     acts += [acts[-1]] * (CHUNK - len(acts))
-    return encode(acts, start)
+    return target(plan, encode(acts, start))
 
 
 def closed_loop(path: str, games: list[str], per_game: int, ticks: int, device: str) -> dict:
@@ -58,15 +59,15 @@ def collect(model: str, games: list[str], per_game: int, ticks: int, beta: float
     rng = np.random.default_rng(seed)
     rows = []
     for env_labels in labels:
-        texts = [t for t, _ in env_labels]
-        rows += [{"prompt": prompt(), "images": pair, "completion": _completion(t)}
-                 for (t, pair), k in zip(env_labels, keep_rows(texts, rng, DECAY)) if k]
+        texts = [t for t, _, _ in env_labels]
+        rows += [{"prompt": prompt(*ctx), "images": pair, "completion": _completion(t)}   # the prompt the policy saw
+                 for (t, pair, ctx), k in zip(env_labels, keep_rows(texts, rng, DECAY)) if k]
     return rows
 
 
 def main(argv=None, git=None):
     from train import runlog, sft
-    from train.grpo import merge
+    from train.sft import merge
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="the SFT model to start from (full weights, not an adapter)")
     ap.add_argument("--base-data", required=True, help="the SFT data; every round trains on it plus all DAgger rows")

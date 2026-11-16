@@ -391,13 +391,6 @@ class MurderMystery2(Env):
                 return b.h
         return None
 
-    def _refuge(self, threat):
-        """Run to whichever other player is farthest from the threat: safety in numbers, away from danger."""
-        others = [b.h.pos for b in self.bots if b.h.alive and b.h is not threat]
-        if not others:
-            return self._far_room(threat.pos)
-        return max(others, key=lambda o: np.linalg.norm((o - threat.pos)[[0, 2]]) - 0.3 * np.linalg.norm((o - self.player.pos)[[0, 2]])).copy()
-
     def _gun_sees(self, h) -> bool:
         return any(b.h.alive and b.role in ("sheriff", "hero") and np.linalg.norm((b.h.pos - h.pos)[[0, 2]]) < 50 and self._los(b.h, h)
                    for b in self.bots)
@@ -470,20 +463,30 @@ class MurderMystery2(Env):
     # ── expert ──
     def expert(self) -> Action:
         p = self.player
+        if self.phase == "lobby":
+            self.say("in the lobby, wait for the round to start")
+        elif self.phase == "end":
+            self.say("round over, wait for the next one")
+        elif not p.alive:
+            self.say("dead, spectate until the next round")
         if self.phase != "round" or not p.alive:
             return Action(cursor=self.cursor)
         m = self._murderer()
         armed_m = m is not None and m[0] != 0 and m[2] and self._los(p, m[1])
         if self.role in ("sheriff", "hero"):
             if self.equipped != "gun":
+                self.say("you have the gun, take it out")
                 return self._tap("1")
             if armed_m:
+                self.say("the murderer has a knife out, aim and shoot them")
                 return self._aim_and_fire(m[1])
+            self.say("no knife in sight, collect coins near other players")
             return self._go(self._crowd_goal(p.pos))
         if self.role == "murderer":
             gun = [k + 1 for k, b in enumerate(self.bots) if b.h.alive and b.role in ("sheriff", "hero")]
             tgt = gun[0] if gun else self._isolated(0)   # the gun-holder first: they're the only one who can stop you
             if tgt < 0:
+                self.say("no one left to hunt, wait")
                 return Action(cursor=self.cursor)
             th = self._char(tgt)
             dist = float(np.linalg.norm((th.pos - p.pos)[[0, 2]]))
@@ -491,16 +494,26 @@ class MurderMystery2(Env):
             # knife out only for the kill, away right after; striking the gun-holder beats its reaction time
             want = dist < 5 and (bool(gun) or not seen) and self.knife_cd <= 0.3
             if want != (self.equipped == "knife"):
+                self.say("close to the target, pull out the knife" if want else "put the knife away so nobody sees it")
                 return self._tap("1")
             a = self._go(th.pos, stop=1.5)
             if dist < KNIFE_RANGE - 0.4 and self.equipped == "knife" and self.knife_cd <= 0:
+                self.say("target in reach, stab them")
                 a.click, a.cursor = True, (0.5, 0.5)
+            elif gun:
+                self.say("hunt down the sheriff before they shoot")
+            else:
+                self.say("hunt down whoever is alone")
             return a
         threat = m[1] if armed_m and np.linalg.norm((m[1].pos - p.pos)[[0, 2]]) < 50 else self._charging()
-        if threat is not None:
-            return self._go(self._refuge(threat))
+        if threat is not None:   # the farthest room: was "run to the player farthest from it", 55 → 44 deaths / 16 seeds
+            self.say("the murderer has a knife out, run to the far room" if armed_m and threat is m[1]
+                     else "someone is sprinting at you, run to the far room")
+            return self._go(self._far_room(threat.pos))
         if self.gun_drop is not None:
+            self.say("the gun dropped, go pick it up")
             return self._go(self.gun_drop)
+        self.say("collect coins near other players")
         return self._go(self._crowd_goal(p.pos))
 
     def _tap(self, k: str) -> Action:

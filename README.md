@@ -1,64 +1,26 @@
-# To do
+![baconhead](assets/banner.png)
 
-- [ ] Raise the Modal spend limit on the `sadiasansari1` workspace, then log in and deploy
+# baconhead
 
-```bash
-cd ~/Desktop/baconhead/baconhead
-.venv/bin/modal token new
-BH_GPU=H100 .venv/bin/modal deploy train/modal_app.py
-```
+A 4B vision-language model that plays Roblox games from pixels: imitation of scripted experts in ten simulated
+games, then reinforcement learning on top.
 
-- [ ] Finish the 3B SFT (resumes from checkpoint-1500 of 9000, ~3.6 h, ~$19)
+<!-- VIDEO: the trained policy playing (replace with the final gameplay video / GIF) -->
+**[ video of the trained policy playing — coming soon ]**
 
-```bash
-.venv/bin/modal run train/modal_app.py --cmd sft --args "--data /vol/data/sim_sft_v2 --out /vol/runs/sft_v2 --max-steps 9000"
-```
+**Blog post:** _coming soon_ <!-- LINK: blog post -->
 
-- [ ] Benchmark the 3B SFT with the open-loop check (~$1). Go on to DAgger only if its changed-keys accuracy is well above 0.54
+## Training
 
-```bash
-.venv/bin/modal run train/modal_app.py --cmd eval --args "--model /vol/runs/sft_v2 --name qwen2.5-vl-3b_sft_v2 --openloop"
-.venv/bin/modal volume get --force baconhead /results/bench/ results/
-.venv/bin/python -m train.eval --table
-```
+<!-- GRAPH: SFT / DAgger / RL loss and eval curves (replace with results image) -->
+**[ loss and eval curves — coming soon ]**
 
-- [ ] DAgger, 2 rounds (~$13); each round is benchmarked into `/vol/runs/dagger_v2/dagger.json`
+## Run it
+
+Weights: _coming soon on Hugging Face_ <!-- LINK: https://huggingface.co/<org>/<model> -->
 
 ```bash
-.venv/bin/modal run train/modal_app.py --cmd dagger --args "--model /vol/runs/sft_v2 --base-data /vol/data/sim_sft_v2 --out /vol/runs/dagger_v2 --rounds 2 --sft-args '--max-steps 500'"
-.venv/bin/modal volume get --force baconhead /runs/dagger_v2/dagger.json results/dagger_v2.json
-.venv/bin/modal run train/modal_app.py --cmd eval --args "--model /vol/runs/dagger_v2/round1 --name qwen2.5-vl-3b_dagger2 --openloop"
-```
-
-- [ ] Promote the best model to the base the engine serves
-
-```bash
-.venv/bin/modal run train/modal_app.py --cmd promote --args "/vol/runs/dagger_v2/round1"
-```
-
-- [ ] Optional: GRPO on top, only if DAgger beats walking forward (stop if the eval doesn't improve or entropy collapses)
-
-```bash
-.venv/bin/modal run train/modal_app.py --cmd data --args "--shards 32 --episodes 2 --ticks 600 --states" --name sim_grpo
-.venv/bin/modal run train/modal_app.py --cmd grpo --args "--model /vol/runs/dagger_v2/round1 --data /vol/data/sim_grpo --out /vol/runs/grpo_v4 --max-steps 300"
-.venv/bin/modal run train/modal_app.py --cmd eval --args "--model /vol/runs/grpo_v4 --name qwen2.5-vl-3b_grpo300 --openloop"
-```
-
-- [ ] Put a fresh OpenRouter key in `.env` (`OPENROUTER_API_KEY=...`; the current one is expired), then benchmark API models
-
-```bash
-.venv/bin/python -m train.eval --api google/gemini-2.5-flash --name gemini-2.5-flash_zeroshot
-.venv/bin/python -m train.eval --table
-```
-
-- [ ] Calibrate the real-Roblox drag timing (`LOOK_BUDGET_MS` in `control/controller.py`, `RDOWN_SETTLE_S` in `control/inject.py`) and try live play
-
-```bash
-.venv/bin/python run.py --backend modal
-```
-
-- [ ] Test the SSH backend
-
-```bash
-.venv/bin/python run.py --backend ssh --host user@gpu-box --dir ~/baconhead
+pip install -r requirements.txt
+python -m train.eval --model <hf-id-or-local-dir> --no-bench --play 600 --seeds 1   # the policy plays all 10 games
+python -m train.eval --video results/bench/play_<name>                                # render its runs to mp4
 ```

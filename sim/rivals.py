@@ -297,8 +297,10 @@ class Rivals(Env):
     def expert(self) -> Action:
         p, b = self.player, self.bot
         if self.menu:
+            self.say("menu is open, close it")
             return Action(keys=frozenset({"esc"}))
         if not p.alive or not b.alive or self.round_over_t is not None:
+            self.say("eliminated, wait for the next round" if not p.alive else "round won, wait for the next round")
             return Action()
         eye = self._eye()
         flat = float(np.linalg.norm((b.pos - p.pos)[[0, 2]]))
@@ -333,6 +335,20 @@ class Rivals(Env):
             keys.add("space")
             if self._exp_stuck >= 8:   # still stuck behind cover: sidestep around it
                 keys.add("d" if (self._exp_stuck // 10) % 2 == 0 else "a")
+        if "r" in keys and self.ammo == 0:
+            self.say("out of ammo, reload")
+        elif self._exp_stuck >= 3:
+            self.say("stuck on cover, jump and go around it")
+        elif los and reloading:
+            self.say("reloading, strafe until the magazine is full")
+        elif los and "lmb" in keys:
+            self.say("enemy in sight, strafe and fire")
+        elif los:
+            self.say("enemy in sight, strafe and aim at them")
+        elif "r" in keys:
+            self.say("enemy out of sight, reload while pushing")
+        else:
+            self.say("enemy out of sight, push forward to find them")
         return Action(keys=frozenset(keys), look_x=lx, look_y=ly, cursor=(0.5, 0.5))
 
 

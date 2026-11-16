@@ -390,49 +390,68 @@ class AdoptMe(Env):
     def expert(self) -> Action:
         u = self.ui
         if u in ("daily", "offer"):
+            self.say("daily reward pop-up is open, claim it" if u == "daily" else "an offer pop-up is open, close it")
             return self._click_ui("claim" if u == "daily" else "close")
         if u == "choose":
+            self.say("task picker is open, pick the first task")
             return self._click_ui("pick:0")
         if u == "doctor":
+            self.say("doctor asks to heal my pet, click yes")
             return self._click_ui("heal")
         need = self._top_need()
         if isinstance(u, tuple) and u[0] == "buy":
+            self.say("buy confirmation is open, click buy" if self.bucks >= FOODS[u[1]][1] else "not enough bucks, cancel the purchase")
             return self._click_ui("buy" if self.bucks >= FOODS[u[1]][1] else "cancel")
         if isinstance(u, tuple) and u[0] == "shop":
             want = [x for x in SHOPS[u[1]][1] if need and FOODS[x][0] == need and FOODS[x][1] <= self.bucks]
+            self.say("shop is open, pick the cheapest item my pet needs" if want else "nothing to buy here, close the shop")
             return self._click_ui(f"shopitem:{min(want, key=lambda x: FOODS[x][1])}" if want else "close")
         if u == "pet":
             if need == "attention":
+                self.say("pet menu is open, click pet")
                 return self._click_ui("petit")
             ok = self.equipped and need == FOODS[self.equipped][0]
+            self.say("pet menu is open, use the held item" if ok else "pet menu is open, close it")
             return self._click_ui("use" if ok else "close")
         if u == "map":
+            self.say("map is open, teleport toward the task" if getattr(self, "_tp", None) else "map is open, close it")
             return self._click_ui(f"tp:{self._tp}" if getattr(self, "_tp", None) else "close")
         if self.activity is not None:
             need_, _, anchor, rad = self.activity
+            self.say("pet is doing a task, stay close until it finishes")
             return self._walk(anchor, stop=min(rad * 0.5, 4.0)) if rad < 1e8 else Action(cursor=self.cursor)
         if need is None:
+            self.say("pet has no needs, wait near home")
             return self._close_or(lambda: self._walk(np.array([0.0, 0, 30]), stop=6))
         if need == "choose":
+            self.say("pet has a question bubble, click it")
             return self._click_ui(f"task:{self.needs.index('choose')}")
         how = TASKS[need][0]
         if how.startswith("pet:"):
+            self.say("pet wants attention, click the pet")
             return self._close_or(lambda: self._click_world(self.pet_pos + [0, 1.2, 0], stop=8))
         if how.startswith("food:"):
             items = [x for x in FOODS if FOODS[x][0] == need]
             have = [x for x in items if self.inventory[x] > 0]
             if self.equipped in items:
+                self.say("holding food, click my pet to use it")
                 return self._close_or(lambda: self._click_world(self.pet_pos + [0, 1.2, 0], stop=6))
             if have:
+                self.say("backpack is open, equip the food" if u == "backpack" else "food is in my backpack, open the backpack")
                 return self._click_ui(f"item:{have[0]}") if u == "backpack" else self._click_ui("backpack")
             if self.bucks < min(FOODS[x][1] for x in items):
+                self.say(f"pet is {need} but bucks are too low, wait at home")
                 return self._close_or(lambda: self._walk(np.array([0.0, 0, 30]), stop=6))
             part = self.pizza if SHOP_OF[need] == "pizza_shop" else self.lemonade
+            self.say("pet is hungry, go click the pizza shop counter" if need == "hungry" else "pet is thirsty, go click the lemonade stand")
             return self._close_or(lambda: self._travel(self.world.c[part], click=True))
         if how.startswith("click:"):
             part = {"bed": self.bed, "tub": self.tub, "doctor": self.doctor}[how[6:]]
+            self.say({"bed": "pet is sleepy, go click the bed at home", "tub": "pet is dirty, go click the bathtub at home",
+                      "doctor": "pet is sick, go click the hospital doctor"}[how[6:]])
             return self._close_or(lambda: self._travel(self.world.c[part], click=True))
         c, rad = self.zones[how[5:]]
+        self.say("pet is bored, go to the playground" if need == "bored" else "pet wants to camp, go to the campsite")
         return self._close_or(lambda: self._travel(c, stop=rad * 0.4))
 
     def _top_need(self):
@@ -442,7 +461,10 @@ class AdoptMe(Env):
         return min(self.needs, key=order.index) if self.needs else None
 
     def _close_or(self, then):
-        return self._click_ui("close") if self.ui == "backpack" else then()
+        if self.ui == "backpack":
+            self.say("backpack is open, close it")
+            return self._click_ui("close")
+        return then()
 
     def _travel(self, goal, click=False, stop=5.0) -> Action:
         """Far away and outside: open the Map and teleport to the nearest stop, like players do."""

@@ -355,37 +355,52 @@ class NinetyNineNights(Env):
     def expert(self) -> Action:
         p = self.player
         if not p.alive:
+            self.say("you died, wait to respawn at camp")
             return Action(cursor=self.cursor)
         ph = self.phase()
         night_soon = self.is_night() or ph > DAY_S - 8
         fire_d = float(np.hypot(*(p.pos - FIRE)[[0, 2]]))
         lr = light_radius(self.fuel)
-        # deliver logs whenever the sack is full, the fire is low, or night is coming
-        if self.sack > 0 and (self.sack >= SACK or self.fuel < 60 or night_soon):
+        # deliver logs whenever the sack is full, night is coming, or the fire won't last the night: it has to
+        # hold NIGHT_S of fuel at nightfall (a fixed "fuel < 60" let one seed's fire die at night 1, 3 deaths)
+        at_dusk = self.fuel - (0.0 if self.is_night() else max(0.0, DAY_S - ph)) * FUEL_DRAIN
+        if self.sack > 0 and (self.sack >= SACK or at_dusk < NIGHT_S * FUEL_DRAIN + 15 or night_soon):
+            self.say("night is coming, carry logs back to the fire" if night_soon else
+                     "sack is full, carry logs back to the fire" if self.sack >= SACK else
+                     "fire is low, carry logs back to the fire")
             return self._go_prompt(FIRE, "_add_fuel")
         if night_soon:   # wait it out near the fire
             if fire_d > max(2.5, 0.4 * lr):
+                self.say("it's night, get back into the firelight" if self.is_night() else "night is coming, head back to the fire")
                 return self._go(FIRE + [2.5, 0, 2.5], stop=1.0)
+            self.say("stay by the fire in the light until dawn")
             return Action(cursor=self.cursor)
         if self.hunger < 50:
             ready = [k for k, b in enumerate(self.bushes) if self.t >= b[1]]
             if ready:
                 k = min(ready, key=lambda k: np.hypot(*(self.bushes[k][2] - p.pos)[[0, 2]]))
+                self.say("hungry, go eat berries from the nearest bush")
                 return self._go_prompt(self.bushes[k][2], "_eat")
         if self.logs and self.sack < SACK:
             lid = min(self.logs, key=lambda i: np.hypot(*(self.logs[i] - p.pos)[[0, 2]]))
+            self.say("a log is on the ground, pick it up")
             return self._go_prompt(self.logs[lid], "_pick_log")
         standing = [tr for tr in self.trees if tr[2] > 0]
         if not standing:
+            self.say("no trees left standing, wait by the fire")
             return self._go(FIRE + [2.5, 0, 2.5])
         tr = min(standing, key=lambda tr: np.hypot(*(tr[3] - p.pos)[[0, 2]]))
         if self.equipped != "axe":
+            self.say("equip the axe and walk to the nearest tree")
             a = self._go(tr[3], stop=2.6)
             a.keys = a.keys | {"1"} if "1" not in self.held else a.keys
             return a
         a = self._go(tr[3], stop=2.6)
         if np.hypot(*(tr[3] - p.pos)[[0, 2]]) - 0.9 < AXE_RANGE - 0.5:
             a.keys = frozenset({"lmb"})
+            self.say("next to a tree, chop it with the axe")
+        else:
+            self.say("walk to the nearest tree to chop it")
         return a
 
     def _go(self, goal, stop=1.5) -> Action:
@@ -397,11 +412,13 @@ class NinetyNineNights(Env):
         if dist > stop + 1:
             base = math.atan2(d[0], d[1])
             o = p + [0, 1.2, 0]
-            for off in (0.0, 0.6, -0.6, 1.1, -1.1, 1.6, -1.6):
+            for off in (0.0, 0.6, -0.6, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, 2.8, -2.8):   # last four back out of rock pockets
                 ang = base + off
                 ray = np.array([math.sin(ang), 0.0, math.cos(ang)])
-                t, _ = self.world.raycast(o, ray, max_t=min(3.5, dist), mask=self.world.collide)
-                if not math.isfinite(t):
+                side = np.array([ray[2], 0.0, -ray[0]]) * 0.7   # body-wide: a centre ray that grazes a rock corner by
+                hits = [self.world.raycast(o + k * side, ray, max_t=min(3.5, dist), mask=self.world.collide)[0]  # 0.01 pinned
+                        for k in (0, 1, -1)]                                                                       # one seed all day
+                if not any(math.isfinite(t) for t in hits):
                     if off:
                         return self.steer_to(p + ray * 4, stop_dist=0.5)
                     break

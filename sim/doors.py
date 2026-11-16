@@ -394,32 +394,41 @@ class Doors(Env):
         p = self.player
         self.goal = None
         if not p.alive:
+            self.say("dead, the run is over")
             return Action(cursor=self.cursor)
         threat = self.rush_warn > 0 or self.rush_on
         if self.hidden >= 0:
             if not threat and self.t - self.rush_end > 0.6:
+                self.say("rush has passed, get out of the wardrobe")
                 return self._press(("_unhide",))
+            self.say("hiding in the wardrobe, wait for rush to pass")
             return Action(cursor=self.cursor)
         if self.screech_pos is not None:
+            self.say("psst, turn around and look at screech")
             return self._look_at(self.screech_pos)
         r = self.room
         if threat:
+            self.say("lights are flickering, hide in the wardrobe")
             cl = [i for i, c in enumerate(self.closets) if c["room"] == r]
             i = min(cl, key=lambda i: np.linalg.norm((self.closets[i]["front"] - p.pos)[[0, 2]]))
             return self._reach(self.closets[i]["front"], ("_hide", i))
         num = r + 1
         d = self.doors.get(num)
         if d is None:
+            self.say("last room reached, nothing left to do")
             return Action(cursor=self.cursor)
         if d["locked"] and num not in self.key_held:
             k = self.keys[num]
             if k["revealed"] and not k["taken"]:
+                self.say("the key is in the open dresser, pick it up")
                 return self._reach(k["front"], ("_take_key", num))
+            self.say("door is locked, search the dressers for the key")
             jd = next(j for j, dr in enumerate(self.drawers) if dr["key"] == num)
             return self._reach(self.drawers[jd]["front"], ("_open", jd))
         n3 = np.r_[d["n"][0], 0, d["n"][1]]
         inside, outside = d["center"] - n3 * 2.5, d["center"] + n3 * 4.0
         if d["locked"]:
+            self.say("got the key, unlock the door")
             return self._reach(inside, ("_unlock", num))
         c = self.rooms[r]["c"]
         cc = np.r_[c[0], 0, c[1]]
@@ -427,10 +436,13 @@ class Doors(Env):
         along = rel[0] * n3[0] + rel[2] * n3[2]
         lateral = abs(rel[0] * n3[2] - rel[2] * n3[0])
         if along > -1.0 and lateral < 1.5:
+            self.say("lined up with the door, walk through it")
             return self._go(outside)                  # lined up in the doorway: commit and walk through
         pd = np.linalg.norm((inside - p.pos)[[0, 2]])
         if pd > np.linalg.norm((inside - cc)[[0, 2]]) + 1:
+            self.say("cut through the middle of the room to the door")
             return self._go(cc)                       # cut through the middle of the room, clear of furniture
+        self.say("walk to the next door")
         return self._go(inside, stop=0.3)
 
     def _go(self, goal, stop=0.6) -> Action:

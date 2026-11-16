@@ -29,6 +29,14 @@ TITLE = {"flood": "Flash Flood", "meteor": "Meteor Shower", "acid": "Acid Rain",
 TIP = {"flood": "Get to high ground!", "meteor": "Find shelter!", "acid": "Get under a roof!", "sandstorm": "Get inside!",
        "tornado": "Stay away from the tornado!", "earthquake": "Get away from buildings!"}
 SAFETY = {"flood": "high", "meteor": "indoors", "acid": "indoors", "sandstorm": "indoors", "tornado": "away", "earthquake": "open"}
+# plan labels (say()): moving toward safety vs. already safe, phrased via the HUD disaster title and what's visible
+GO = {"flood_roof": "flash flood, climb the stairs onto the nearest roof", "flood_hill": "flash flood, climb to the top of the hill",
+      "meteor": "meteor shower, get inside the nearest building", "acid": "acid rain is falling, get under the nearest roof",
+      "sandstorm": "sandstorm, get inside the nearest building", "tornado": "tornado, run far away from the funnel",
+      "earthquake": "earthquake, run into the open away from buildings"}
+STAY = {"flood": "flash flood, stay up high above the water", "meteor": "meteor shower, stay inside under the roof",
+        "acid": "acid rain, stay inside under the roof", "sandstorm": "sandstorm, stay inside under the roof",
+        "tornado": "tornado is far away, stay put and watch it", "earthquake": "earthquake, stay in the open away from buildings"}
 FLOOD_TOP = 14.0
 ROOF_TOP = 13.0
 N_NPC = 4
@@ -316,7 +324,9 @@ class NaturalDisaster(Env):
         if kind == "roof":
             b = g
             on_roof = abs(p[0] - b["cx"]) < b["sx"] / 2 and abs(p[2] - b["cz"]) < b["sz"] / 2 and p[1] > ROOF_TOP - 0.5
-            on_stairs = abs(p[0] - b["xs"]) < 1.3 and b["z0"] - 1 < p[2] < b["zt"] + 1 and p[1] > 0.5
+            # the stairs plus the lane in front of them: once in it, climb. (Was: within 1.2 of the foot → climb,
+            # else → the foot; one step out of that circle flipped the target 180° and it dithered through floods.)
+            on_stairs = abs(p[0] - b["xs"]) < 1.3 and b["z0"] - 4.5 < p[2] < b["zt"] + 1
             if on_roof:
                 return np.array([b["cx"], ROOF_TOP, b["cz"]])
             if on_stairs:
@@ -324,8 +334,6 @@ class NaturalDisaster(Env):
                     return np.array([b["cx"], ROOF_TOP, b["zt"]])
                 return np.array([b["xs"], 0, b["zt"]])
             foot = np.array([b["xs"], 0, b["z0"] - 3.5])
-            if np.linalg.norm((foot - p)[[0, 2]]) < 1.2:
-                return np.array([b["xs"], 0, b["zt"]])
             for rm in self.rooms:
                 if rm.inside(p):
                     return route(p, foot, self.rooms)
@@ -343,7 +351,11 @@ class NaturalDisaster(Env):
                 continue          # heading into this building (its doorway or stairs): route()/the stair logic handles it
             if _seg_hits_rect(p, g, x0, x1, z0, z1):
                 corners = [np.array([x, 0, z]) for x in (x0 - 0.5, x1 + 0.5) for z in (z0 - 0.5, z1 + 0.5)]
-                ok = [c for c in corners if not _seg_hits_rect(p, c, x0, x1, z0, z1) and np.linalg.norm((c - p)[[0, 2]]) > 1.5]
+                # reaching a corner is checked against the real footprint, not the padding: hugging a wall puts you
+                # in (or on the edge of) the padding, every line then "crossed" it, no corner qualified, and the
+                # player walked straight into the wall through a whole flood or sandstorm
+                r = (x0 + 1.3, x1 - 1.2, z0 + 1.3, z1 - 1.3)
+                ok = [c for c in corners if not _seg_hits_rect(p, c, *r) and np.linalg.norm((c - p)[[0, 2]]) > 1.5]
                 if ok:   # corners with a clear line on to the goal first, then shortest total
                     return min(ok, key=lambda c: (_seg_hits_rect(c, g, x0, x1, z0, z1),
                                                   np.linalg.norm((c - p)[[0, 2]]) + np.linalg.norm((g - c)[[0, 2]])))
@@ -365,14 +377,22 @@ class NaturalDisaster(Env):
     # ── interface ──
     def expert(self) -> Action:
         p = self.player
-        if not p.alive or p.pos[1] > LOBBY[1] - 20:
+        if not p.alive:
+            self.say("you died, wait to respawn in the lobby")
+            return Action(cursor=self.cursor)
+        if p.pos[1] > LOBBY[1] - 20:
+            self.say("intermission, wait in the lobby" if self.phase == "lobby" else "round in progress, wait in the lobby for the next one")
             return Action(cursor=self.cursor)
         goal = self._goal(p)
         self.goal = goal[1] if isinstance(goal[1], np.ndarray) else (
             np.array([goal[1]["cx"], 0, goal[1]["cz"]]) if goal[1] is not None else self.hill)
         nxt = self._next(p, goal)
         if self._safe(p) and np.linalg.norm((nxt - p.pos)[[0, 2]]) < 2.5:
+            self.say(STAY[self.disaster] if self.disaster else
+                     "disaster incoming, wait for it to be announced" if self.phase == "pre" else "round is over, wait to go back to the lobby")
             return Action(cursor=self.cursor)
+        idle = "disaster incoming, wait for it to be announced" if self.phase == "pre" else "round is over, wait to go back to the lobby"
+        self.say(GO["flood_" + goal[0]] if self.disaster == "flood" else GO.get(self.disaster, idle))   # None: between disasters
         return self.steer_to(nxt, stop_dist=1.0)
 
     def potential(self) -> float:

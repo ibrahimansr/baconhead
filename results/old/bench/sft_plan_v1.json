@@ -1,0 +1,387 @@
+{
+ "obby": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 11.0,
+  "ret": -7.321350837898581,
+  "ret_noop": 0.0,
+  "ret_random": -1.4557269873236345,
+  "ret_expert": 29.497965816089803,
+  "ret_walk": -7.51559870468991,
+  "norm": -0.24819849895904064,
+  "norm_random": -0.049350080490282534,
+  "norm_walk": -0.25478362648961006,
+  "n": 2
+ },
+ "brainrot": {
+  "score": 2.0,
+  "score_noop": 2.0,
+  "score_random": 2.0,
+  "score_expert": 2.0,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 0.0,
+  "ret_walk": 0.0,
+  "norm": null,
+  "norm_random": null,
+  "norm_walk": null,
+  "n": 2
+ },
+ "adoptme": {
+  "score": 0.5,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 2.0,
+  "ret": 0.4,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 1.35,
+  "ret_walk": 0.0,
+  "norm": 0.2962962962962963,
+  "norm_random": 0.0,
+  "norm_walk": 0.0,
+  "n": 2
+ },
+ "disaster": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 0.0,
+  "ret": 0.0,
+  "ret_noop": -0.5,
+  "ret_random": -0.5,
+  "ret_expert": 0.0,
+  "ret_walk": -0.5,
+  "norm": 1.0,
+  "norm_random": 0.0,
+  "norm_walk": 0.0,
+  "n": 2
+ },
+ "garden": {
+  "score": 1.3010299956639813,
+  "score_noop": 1.3010299956639813,
+  "score_random": 1.3010299956639813,
+  "score_expert": 1.5563025007672873,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 0.5663954749208013,
+  "ret_walk": 0.0,
+  "norm": 0.0,
+  "norm_random": 0.0,
+  "norm_walk": 0.0,
+  "n": 2
+ },
+ "forest": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 0.0,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 0.2,
+  "ret_walk": 0.0,
+  "norm": 0.0,
+  "norm_random": 0.0,
+  "norm_walk": 0.0,
+  "n": 2
+ },
+ "mm2": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 0.0,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": -0.5,
+  "ret_expert": 0.9,
+  "ret_walk": -0.5,
+  "norm": 0.0,
+  "norm_random": -0.5555555555555556,
+  "norm_walk": -0.5555555555555556,
+  "n": 2
+ },
+ "doors": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 9.5,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 4.75,
+  "ret_walk": 1.0,
+  "norm": 0.0,
+  "norm_random": 0.0,
+  "norm_walk": 0.21052631578947367,
+  "n": 2
+ },
+ "rivals": {
+  "score": -2.5,
+  "score_noop": -3.0,
+  "score_random": -3.0,
+  "score_expert": 2.5,
+  "ret": -3.05,
+  "ret_noop": -3.8000000000000003,
+  "ret_random": -3.825,
+  "ret_expert": 3.575,
+  "ret_walk": -2.475,
+  "norm": 0.10169491525423735,
+  "norm_random": -0.003389830508474564,
+  "norm_walk": 0.17966101694915257,
+  "n": 2
+ },
+ "fisch": {
+  "score": 0.0,
+  "score_noop": 0.0,
+  "score_random": 0.0,
+  "score_expert": 2.0754395956346197,
+  "ret": 0.0,
+  "ret_noop": 0.0,
+  "ret_random": 0.0,
+  "ret_expert": 4.792123005588291,
+  "ret_walk": 0.0,
+  "norm": 0.0,
+  "norm_random": 0.0,
+  "norm_walk": 0.0,
+  "n": 2
+ },
+ "_summary": {
+  "mean_norm": 0.12775474584349922,
+  "mean_norm_random": -0.06758838517270141,
+  "mean_norm_walk": -0.046683538811837705,
+  "games": 9,
+  "parse_fail": 0.0,
+  "calls": 3000,
+  "api_latency_s": 0.0,
+  "api_errors": 0,
+  "wall_s": 851,
+  "per_game": 2,
+  "ticks": 300
+ },
+ "_openloop": {
+  "obby": {
+   "same": 0.8557692307692307,
+   "change": 0.6421052631578947,
+   "n_change": 95,
+   "plan": 0.82,
+   "plan_switch": 0.691358024691358,
+   "n_switch": 81
+  },
+  "brainrot": {
+   "same": 0.8128654970760234,
+   "change": 0.7142857142857143,
+   "n_change": 28,
+   "plan": 0.935,
+   "plan_switch": 0.09090909090909091,
+   "n_switch": 11
+  },
+  "adoptme": {
+   "same": 0.972972972972973,
+   "change": 0.5,
+   "n_change": 14,
+   "plan": 0.98,
+   "plan_switch": 0.75,
+   "n_switch": 16
+  },
+  "disaster": {
+   "same": 0.9487179487179487,
+   "change": 0.5,
+   "n_change": 4,
+   "plan": 0.94,
+   "plan_switch": 1.0,
+   "n_switch": 4
+  },
+  "garden": {
+   "same": 0.9388888888888889,
+   "change": 0.7894736842105263,
+   "n_change": 19,
+   "plan": 0.99,
+   "plan_switch": 0.9166666666666666,
+   "n_switch": 12
+  },
+  "forest": {
+   "same": 0.9691358024691358,
+   "change": 0.7837837837837838,
+   "n_change": 37,
+   "plan": 0.96,
+   "plan_switch": 0.68,
+   "n_switch": 25
+  },
+  "mm2": {
+   "same": 0.9044943820224719,
+   "change": 0.5238095238095238,
+   "n_change": 21,
+   "plan": 0.85,
+   "plan_switch": 0.4642857142857143,
+   "n_switch": 28
+  },
+  "doors": {
+   "same": 0.9880239520958084,
+   "change": 0.75,
+   "n_change": 32,
+   "plan": 0.83,
+   "plan_switch": 0.819672131147541,
+   "n_switch": 61
+  },
+  "rivals": {
+   "same": 0.8633093525179856,
+   "change": 0.6,
+   "n_change": 60,
+   "plan": 0.87,
+   "plan_switch": 0.7551020408163265,
+   "n_switch": 49
+  },
+  "fisch": {
+   "same": 0.8389261744966443,
+   "change": 0.52,
+   "n_change": 50,
+   "plan": 0.97,
+   "plan_switch": 0.8214285714285714,
+   "n_switch": 28
+  },
+  "_same": 0.909310420202711,
+  "_change": 0.6323457969247442,
+  "_plan": 0.9145,
+  "_plan_switch": 0.6989422239945269
+ },
+ "_play": {
+  "obby": {
+   "goal": "reach the final checkpoint (all stages)",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 18,
+   "info": {
+    "stage": 0,
+    "best_stage": 0,
+    "deaths": 18,
+    "progress": 0.0
+   }
+  },
+  "brainrot": {
+   "goal": "buy a brainrot and collect its earnings (net worth above the starting $100)",
+   "reached_at": null,
+   "score": 2.0,
+   "deaths": 0,
+   "info": {
+    "cash": 100.0,
+    "income": 0,
+    "owned": 0,
+    "networth": 100.0
+   }
+  },
+  "adoptme": {
+   "goal": "feed the hungry pet (one task done)",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 0,
+   "info": {
+    "bucks": 50,
+    "tasks_done": 0,
+    "needs": 4
+   }
+  },
+  "disaster": {
+   "goal": "survive the first disaster (Acid Rain)",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 1,
+   "info": {
+    "wins": 0,
+    "rounds": 1,
+    "phase": "disaster",
+    "disaster": "acid",
+    "health": 100,
+    "deaths": 1
+   }
+  },
+  "garden": {
+   "goal": "grow carrots and sell them for more than you started with (20)",
+   "reached_at": null,
+   "score": 1.3010299956639813,
+   "deaths": 0,
+   "info": {
+    "sheckles": 20,
+    "networth": 20,
+    "plants": 0,
+    "fruit": 0
+   }
+  },
+  "forest": {
+   "goal": "survive night 1",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 0,
+   "info": {
+    "nights": 0,
+    "day": 1,
+    "fuel": 10,
+    "hunger": 67,
+    "health": 100,
+    "deaths": 0,
+    "sack": 0
+   }
+  },
+  "mm2": {
+   "goal": "as Sheriff, shoot the Murderer and win the first round",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 0,
+   "info": {
+    "role": "sheriff",
+    "phase": "round",
+    "coins": 0,
+    "rounds": 0,
+    "wins": 0,
+    "alive": 8,
+    "deaths": 0
+   }
+  },
+  "doors": {
+   "goal": "reach room 10 alive",
+   "reached_at": null,
+   "score": 1.0,
+   "deaths": 0,
+   "info": {
+    "room": 1,
+    "best_room": 1,
+    "health": 100.0,
+    "alive": true,
+    "hidden": false,
+    "deaths": 0
+   }
+  },
+  "rivals": {
+   "goal": "win the first round without dying",
+   "reached_at": null,
+   "score": -7.0,
+   "deaths": 7,
+   "info": {
+    "rounds_won": 0,
+    "rounds_lost": 7,
+    "matches_won": 0,
+    "matches_lost": 1,
+    "health": 100.0,
+    "enemy_health": 100.0,
+    "ammo": 28
+   }
+  },
+  "fisch": {
+   "goal": "catch a fish and sell it",
+   "reached_at": null,
+   "score": 0.0,
+   "deaths": 0,
+   "info": {
+    "money": 0,
+    "bag": 0,
+    "caught": 0,
+    "rod": "Training Rod",
+    "networth": 0
+   }
+  }
+ },
+ "_policy": "/vol/runs/sft_plan_v1"
+}

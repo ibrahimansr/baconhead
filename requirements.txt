@@ -1,14 +1,13 @@
-# baconhead (Python 3.12+; macOS for recording/controlling real Roblox)
+# baconhead (Python 3.12+): sims, imitation (SFT + DAgger) and RL for a VLM game policy
 numpy>=1.26
 pillow>=10.1          # ImageFont.load_default(size=...) for the HUD
 torch>=2.4            # sim renderer; torch.compile needs clang (xcode-select --install)
-torchvision           # Qwen2.5-VL's processor needs it
-pygame-ce>=2.5        # play.py
-transformers>=4.49
-trl>=0.20             # SFTTrainer, GRPOTrainer
-peft                  # LoRA
+torchvision           # Qwen-VL processors need it
+transformers>=5.17    # Qwen3.5 (qwen3_5); the Modal image pins the exact versions it trained with
+trl>=1.14             # SFTTrainer
+peft                  # LoRA (DAgger rounds, RL)
 datasets
 accelerate
-modal>=1.0            # cloud training + serving (the Modal image installs trl[vllm] itself)
-pyobjc-framework-Quartz>=10.0; sys_platform == "darwin"
-mss>=9.0.0
+modal>=1.0            # data, training and evals in the cloud (train/modal_app.py)
+openai                # train/frontier.py: API baselines (gpt-6.1-sol, OpenRouter models)
+anthropic             # train/frontier.py: Claude baseline

@@ -1,11 +1,16 @@
-"""The benchmark: any policy, closed loop, on fixed held-out seeds of all ten sims, next to noop / random / expert.
+"""Evaluation: goal completion on held-out levels (the headline), the reward benchmark, and open-loop accuracy.
 
-    python -m train.eval --model runs/sft_v2                         # a trained model dir (or LoRA dir)
-    python -m train.eval --model Qwen/Qwen2.5-VL-7B-Instruct         # any HF VLM, zero-shot
-    python -m train.eval --api qwen/qwen3-vl-8b-instruct             # any OpenRouter VLM, zero-shot (.env key)
-    python -m train.eval --table                                     # leaderboard of everything in results/bench/
+    python -m train.eval --model runs/il --play 1500 --seeds 5 --openloop     # a model dir (or LoRA dir)
+    python -m train.eval --table                                              # leaderboard of results/bench/
+    python -m train.eval --video results/bench/play_il                        # mp4s from saved inputs (local)
 
-Every policy gets the same prompt (model.vlm.SYSTEM + two frames) and must answer in the action text format; the
+--play: the model plays every game's gold goal (sim.gold: "reach room 10 alive", "catch a fish and sell it") on
+`seeds` held-out levels (seed 0 is the gold level itself) for `ticks` ticks, all envs in lockstep; the result is the
+fraction of levels where the goal was reached, plus every input and generation saved for videos. One level per
+game can't tell 1.5/10 from 3/10, so use 5 seeds for anything you'll compare. API models (gpt-6.1-sol, Qwen3.5
+zero-shot) play the same levels through train/frontier.py.
+
+Every policy gets the same prompt (model.vlm.prompt + two frames) and must answer in the action text format; the
 episode runs in lockstep with the sim (generation time doesn't cost game time, latency is reported separately).
 Per game: score() is the game's own number (stages, rooms, net worth...) but moves slowly, so the headline is the
 summed env reward, which includes partial progress, normalized as (policy - noop) / (expert - noop): 0 = does
@@ -28,7 +33,7 @@ import numpy as np
 
 import sim
 from core.actions import HEADS, Action
-from model.vlm import EXEC, FRAME_GAP, OBS_H, OBS_W, VLMRunner, decode, encode, image
+from model.vlm import EXEC, FRAME_GAP, OBS_H, OBS_W, VLMRunner, decode, encode, image, split_plan
 
 EVAL_SEED = 999_000   # training seeds never reach this range
 BENCH_DIR = "results/bench"
@@ -52,6 +57,7 @@ def rollouts(policy, games: list[str], per_game: int, ticks: int, seed: int, dev
     hist = [deque(maxlen=FRAME_GAP + 1) for _ in envs]
     queues: list[list] = [[] for _ in envs]
     labels: list[list] = [[] for _ in envs]
+    plans = [""] * len(envs)   # each env's last PLAN line from the policy: its memory, fed back in the next prompt
     ret = [0.0] * len(envs)
     for t in range(ticks):
         frames = render([e.scene() for _, e in envs], OBS_H, OBS_W, device=device).cpu().numpy()   # (B, H, W, 3)
@@ -59,16 +65,18 @@ def rollouts(policy, games: list[str], per_game: int, ticks: int, seed: int, dev
             h.append(f)
         if t % EXEC == 0:
             pairs = [[image(h[0]), image(h[-1])] for h in hist]
+            ctx = [(g, pl) for (g, _), pl in zip(envs, plans)]
             out = []
             for i in range(0, len(pairs), gen_batch):
-                out += policy.generate_batch(pairs[i:i + gen_batch])
+                out += policy.generate_batch(pairs[i:i + gen_batch], ctx[i:i + gen_batch])
             for i, ((g, e), text) in enumerate(zip(envs, out)):
                 acts, ok = decode(text, e.cursor)
                 policy.parse_fail += not ok
                 policy.calls += 1
                 queues[i] = acts[:EXEC]
                 if label_fn and t % label_every == 0:
-                    labels[i].append((label_fn(e), pairs[i]))
+                    labels[i].append((label_fn(e), pairs[i], ctx[i]))
+                plans[i] = split_plan(text)[0] or plans[i]
         for i, (g, e) in enumerate(envs):
             a = queues[i].pop(0) if queues[i] else None
             if a is None or (beta and rng.random() < beta):
@@ -116,129 +124,148 @@ def bench(policy, games: list[str], per_game: int = 2, ticks: int = 300, device:
     return res
 
 
+def play(policy, games: list[str], ticks: int, device: str, out: str, seeds: int = 1) -> dict:
+    """The model on each game's gold goal and settings (sim.gold) on `seeds` held-out levels, all envs in lockstep.
+    Saves <out>/<game>_s<k>.json in the gold format (the played inputs as text, plus every generation), so
+    `python -m train.eval --video <out>` replays them deterministically into mp4s. Records the first tick the goal held.
+    → {game: {"success": fraction of levels, "levels": [per level]}}"""
+    from sim.gold import PLANS, SEED
+    from sim.render import render
+    from model.vlm import encode_tick
+    runs = [(g, k) for g in games for k in range(seeds)]
+    envs = [sim.make(g, seed=SEED + k, max_steps=10 ** 9, **PLANS[g][0]) for g, k in runs]
+    games = [g for g, _ in runs]
+    hist = [deque(maxlen=FRAME_GAP + 1) for _ in envs]
+    queues, texts, first = [[] for _ in envs], [[] for _ in envs], [None] * len(envs)
+    raw = [[] for _ in envs]   # every generation as (tick, text): the trace, including ticks it never got to play
+    plans = [""] * len(envs)
+    for t in range(ticks):
+        frames = render([e.scene() for e in envs], OBS_H, OBS_W, device=device).cpu().numpy()
+        for h, f in zip(hist, frames):
+            h.append(f)
+        if t % EXEC == 0:
+            outs = policy.generate_batch([[image(h[0]), image(h[-1])] for h in hist], list(zip(games, plans)))
+            for i, (e, o) in enumerate(zip(envs, outs)):
+                plans[i] = split_plan(o)[0] or plans[i]
+                acts, ok = decode(o, e.cursor)
+                policy.parse_fail += not ok
+                policy.calls += 1
+                queues[i] = acts[:EXEC]
+                raw[i].append((t, o))
+        for i, (g, e) in enumerate(zip(games, envs)):
+            a = queues[i].pop(0) if queues[i] else Action(cursor=e.cursor)
+            texts[i].append(encode_tick(a, e.cursor))
+            e.step(decode(texts[i][-1], e.cursor)[0][0])   # exactly what replaying the text does
+            if first[i] is None and PLANS[g][2](e):
+                first[i] = t + 1
+    os.makedirs(out, exist_ok=True)
+    res = {}
+    for (g, k), e, tx, f, rw in zip(runs, envs, texts, first, raw):
+        lv = {"seed": SEED + k, "reached_at": f, "score": float(e.score()), "deaths": int(e.deaths), "info": e.info()}
+        res.setdefault(g, {"goal": PLANS[g][1], "levels": []})["levels"].append(lv)
+        json.dump({"game": g, "kw": PLANS[g][0], "ticks": len(tx), "inputs": tx, "raw": rw, "goal": PLANS[g][1]} | lv,
+                  open(os.path.join(out, f"{g}_s{k}.json"), "w"))
+    for v in res.values():
+        v["success"] = float(np.mean([lv["reached_at"] is not None for lv in v["levels"]]))
+    res["_success"] = float(np.mean([v["success"] for v in res.values()]))
+    return res
+
+
+def videos(d: str) -> None:
+    """Every <d>/<game>.json from play() → <d>/<game>.mp4, replayed and rendered locally."""
+    from sim.gold import render_video
+    for p in sorted(glob.glob(os.path.join(d, "*.json"))):
+        r = json.load(open(p))
+        if "inputs" in r:
+            name = os.path.basename(p)[:-5]
+            print(render_video(r["game"], r["inputs"], r["kw"], out=d, seed=r.get("seed"), name=name), "goal",
+                  "REACHED at tick %s" % r["reached_at"] if r["reached_at"] else "not reached")
+
+
 def openloop(policy, games: list[str], ticks: int = 400) -> dict:
     """On held-out *expert* states: does the first tick's held-key set match the expert's? Split into rows where the
     expert keeps the previous keys and rows where it changes them (jump, turn, stop, fire). A model that's fine on the
     first and bad on the second can't see the decision, which DAgger won't fix; good on both but bad closed loop
     is compounding error, which DAgger does fix."""
-    from train.dataset import sim_rows
+    from train.dataset import game_rows
     keys = lambda text: decode(text)[0][0].keys
+    prev = lambda row: row["prompt"][1]["content"][2]["text"].split("Your previous plan: ")[1].split("\n")[0]
     res = {}
     for g in games:
-        rows = sim_rows(g, EVAL_SEED + 3, ticks, noise=0.0, decay=1.0)
+        rows = game_rows(g, EVAL_SEED + 3, ticks, noise=0.0, decay=1.0)
         labs = [r["completion"][0]["content"][0]["text"] for r in rows]
         outs = []
         for i in range(0, len(rows), 16):
-            outs += policy.generate_batch([r["images"] for r in rows[i:i + 16]])
+            outs += policy.generate_batch([r["images"] for r in rows[i:i + 16]],
+                                          [(g, "" if prev(r) == "none yet" else prev(r)) for r in rows[i:i + 16]])
         hit = {"same": [], "change": []}
         for i in range(1, len(rows)):
             hit["same" if keys(labs[i]) == keys(labs[i - 1]) else "change"].append(keys(outs[i]) == keys(labs[i]))
-        res[g] = {k: float(np.mean(v)) if v else None for k, v in hit.items()} | {"n_change": len(hit["change"])}
-    for k in ("same", "change"):
+        plan_hit = [split_plan(o)[0] == split_plan(lab)[0] for o, lab in zip(outs, labs)]
+        # the copycat test: rows where the expert's plan differs from the previous one (the prompt shows the old plan)
+        flip = [h for h, r, lab in zip(plan_hit, rows, labs) if split_plan(lab)[0] != prev(r)]
+        res[g] = {k: float(np.mean(v)) if v else None for k, v in hit.items()} | {"n_change": len(hit["change"]),
+                  "plan": float(np.mean(plan_hit)), "plan_switch": float(np.mean(flip)) if flip else None, "n_switch": len(flip)}
+    for k in ("same", "change", "plan", "plan_switch"):
         res["_" + k] = float(np.mean([v[k] for g, v in res.items() if not g.startswith("_") and v[k] is not None]))
     return res
 
 
-class APIRunner:
-    """The same prompt, answered by a hosted VLM through OpenRouter: a zero-shot baseline."""
-
-    def __init__(self, model: str, workers: int = 16):
-        from model.vlm import SYSTEM
-        self.model, self.workers, self.system = model, workers, SYSTEM
-        self.key = os.environ.get("OPENROUTER_API_KEY") or _dotenv().get("OPENROUTER_API_KEY")
-        assert self.key, "OPENROUTER_API_KEY missing from env and .env"
-        self.calls, self.parse_fail, self.latency, self.errors = 0, 0, 0.0, 0
-        self._post({"model": model, "max_tokens": 5, "messages": [{"role": "user", "content": "ok"}]})   # bad key/model: fail now, not score 3000 no-ops
-
-    def _post(self, body: dict) -> str:
-        import urllib.request
-        req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions", data=json.dumps(body).encode(),
-                                     headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return json.load(r)["choices"][0]["message"]["content"] or ""
-
-    def generate_batch(self, batch: list[list]) -> list[str]:
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(self.workers) as ex:
-            return list(ex.map(self._one, batch))
-
-    def _one(self, imgs) -> str:
-        import base64
-        import io
-
-        def url(im):
-            buf = io.BytesIO()
-            im.save(buf, format="JPEG", quality=90)
-            return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
-        body = {"model": self.model, "max_tokens": 80, "temperature": 0,
-                "messages": [{"role": "system", "content": self.system},
-                             {"role": "user", "content": [*({"type": "image_url", "image_url": {"url": url(im)}} for im in imgs),
-                                                          {"type": "text", "text": "Your next 4 ticks. Reply with only the 4 ticks."}]}]}
-        for attempt in range(4):   # rate limits and provider hiccups: back off, then give up to a no-op chunk
-            t0 = time.time()
-            try:
-                out = self._post(body)
-                self.latency += time.time() - t0
-                return out
-            except Exception:
-                time.sleep(2 ** attempt)
-        self.errors += 1
-        return ""
-
-
-def _dotenv() -> dict:
-    try:
-        return dict(line.strip().split("=", 1) for line in open(".env") if "=" in line and not line.startswith("#"))
-    except OSError:
-        return {}
-
-
 def table(d: str = BENCH_DIR) -> str:
-    """Leaderboard: one row per benchmarked policy, mean norm then per-game norms."""
-    rows = []
-    for p in sorted(glob.glob(os.path.join(d, "*.json"))):
-        r = json.load(open(p))
-        rows.append((r["_summary"]["mean_norm"], os.path.basename(p)[:-5], r))
+    """Leaderboard, one row per evaluated policy: gold-goal success per game (the headline), then the reward
+    benchmark's mean norm and open-loop key accuracy where they were run."""
+    rows = [(os.path.basename(p)[:-5], json.load(open(p))) for p in sorted(glob.glob(os.path.join(d, "*.json")))]
     if not rows:
         return "no results in " + d
-    games = [g for g in rows[0][2] if not g.startswith("_")]
-    fmt = lambda x: "  -  " if x is None else f"{x:5.2f}"
-    head = f"{'policy':38s} {'mean':>5s} " + " ".join(f"{g[:7]:>7s}" for g in games) + "  parse-fail  open-loop same/change"
+    games = list(sim.ENVS)
+    pct = lambda x: "    -" if x is None else f"{x:5.0%}"
+    head = f"{'policy':30s} {'goals':>5s} " + " ".join(f"{g[:7]:>7s}" for g in games) + "   norm  open-loop same/change/plan-switch"
     lines = [head, "-" * len(head)]
-    r0 = rows[0][2]
-    for b in ("random", "walk"):   # scripted baselines, same seeds: a model has to beat holding W, not just noop
-        lines.append(f"{'(' + b + ')':38s} {r0['_summary']['mean_norm_' + b]:5.2f} " + " ".join(f"{fmt(r0[g]['norm_' + b]):>7s}" for g in games))
-    for m, name, r in sorted(rows, key=lambda x: -x[0]):
-        lines.append(f"{name[:38]:38s} {m:5.2f} " + " ".join(f"{fmt(r[g]['norm']):>7s}" for g in games)
-                     + f"  {r['_summary']['parse_fail']:9.0%}" + (f"  {r['_openloop']['_same']:.2f}/{r['_openloop']['_change']:.2f}" if "_openloop" in r else ""))
-    lines.append("norm: 0 = noop, 1 = scripted expert, on summed env reward over the same held-out seeds")
+    goal = lambda r: r.get("_play", {}).get("_success")
+    for name, r in sorted(rows, key=lambda x: -(goal(x[1]) or -1)):
+        pl, ol = r.get("_play", {}), r.get("_openloop", {})
+        norm = r.get("_summary", {}).get("mean_norm")
+        lines.append(f"{name[:30]:30s} {pct(goal(r))} " + " ".join(f"{pct(pl.get(g, {}).get('success')):>7s}" for g in games)
+                     + f"  {'   -  ' if norm is None or norm != norm else f'{norm:5.2f} '}"
+                     + (f"  {ol['_same']:.2f}/{ol['_change']:.2f}/{ol.get('_plan_switch', float('nan')):.2f}" if ol else ""))
+    lines.append("goals: fraction of --play levels where the gold goal was reached; norm: reward benchmark, 0 = noop, 1 = expert")
     return "\n".join(lines)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=None, help="model dir, LoRA dir, or HF id")
-    ap.add_argument("--api", default=None, help="OpenRouter model id, e.g. qwen/qwen3-vl-8b-instruct")
     ap.add_argument("--games", default=",".join(sim.ENVS))
     ap.add_argument("--per-game", type=int, default=2)
     ap.add_argument("--ticks", type=int, default=300)
-    ap.add_argument("--name", default=None, help="leaderboard row name (default: from --model/--api)")
+    ap.add_argument("--name", default=None, help="leaderboard row name (default: from --model)")
     ap.add_argument("--out", default=BENCH_DIR)
     ap.add_argument("--table", action="store_true")
     ap.add_argument("--openloop", action="store_true", help="also key accuracy on expert states, split same/changed keys")
+    ap.add_argument("--play", type=int, default=0, help="also play every gold goal this many ticks; inputs → <out>/play_<name>/")
+    ap.add_argument("--seeds", type=int, default=5, help="--play levels per game (seed 0 = the gold level)")
+    ap.add_argument("--no-bench", action="store_true", help="skip the reward benchmark (gameplay/open-loop only)")
+    ap.add_argument("--video", default=None, help="render a play dir's inputs to mp4s (local, no model)")
     args = ap.parse_args(argv)
     if args.table:
         print(table(args.out))
         return
+    if args.video:
+        return videos(args.video)
     from sim.render import best_device
     dev = best_device()
-    policy = APIRunner(args.api) if args.api else VLMRunner(args.model, device=dev)
-    res = bench(policy, args.games.split(","), args.per_game, args.ticks, dev)
+    policy = VLMRunner(args.model, device=dev)
+    games = args.games.split(",")
+    res = {} if args.no_bench else bench(policy, games, args.per_game, args.ticks, dev)
     if args.openloop:
-        res["_openloop"] = openloop(policy, args.games.split(","))
-    name = args.name or (args.api or os.path.basename(os.path.normpath(args.model))).replace("/", "_")
+        res["_openloop"] = openloop(policy, games)
+    name = args.name or os.path.basename(os.path.normpath(args.model)).replace("/", "_")
+    if args.play:
+        res["_play"] = play(policy, games, args.play, dev, os.path.join(args.out, "play_" + name), args.seeds)
+        print("goal success:", {g: v["success"] for g, v in res["_play"].items() if not g.startswith("_")}, flush=True)
+    res.setdefault("_summary", {"mean_norm": float("nan"), "parse_fail": policy.parse_fail / max(1, policy.calls)})
     os.makedirs(args.out, exist_ok=True)
-    json.dump(res | {"_policy": args.api or args.model}, open(os.path.join(args.out, name + ".json"), "w"), indent=1)
+    json.dump(res | {"_policy": args.model}, open(os.path.join(args.out, name + ".json"), "w"), indent=1)
     print(table(args.out))
     return res
 

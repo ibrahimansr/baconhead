@@ -539,25 +539,31 @@ class StealABrainrot(Env):
         p, P0 = self.player, self.plots[0]
         cur = self.cursor
         if self.carrying >= 0:
+            self.say("carrying a stolen brainrot, run back to my base")
             return self._go(P0["home"])
         for b in self.brainrots.values():   # defend
             if b.state == "carried" and b.owner == 0 and b.carrier > 0:
                 th = self.npcs[b.carrier - 1].h
                 if self.equipped != "bat":
+                    self.say("someone is stealing my brainrot, equip the bat")
                     return Action(keys=frozenset({"1"}), cursor=cur)
+                self.say("someone is stealing my brainrot, chase and hit them")
                 a = self._go(th.pos, stop=2.5)
                 if np.linalg.norm(th.pos - p.pos) < BAT_RANGE - 1.5:
                     a.click = True
                     a.cursor = (0.5, 0.5)
                 return a
         if self.equipped == "bat":
+            self.say("bat is out, put it away")
             return Action(keys=frozenset({"1"}), cursor=cur)
         if not self._locked(0) and any(np.linalg.norm(n.h.pos - P0["home"]) < 45 for n in self.npcs):
+            self.say("base is unlocked and rivals are near, step on the lock")
             return self._go(self.world.c[P0["lock"]], stop=0.5)
         mine = [b for b in self.brainrots.values() if b.owner == 0 and b.state == "slot"]
         unc = sum(b.acc for b in mine)
         if mine and unc > max(40, 0.25 * self.cash):
             b = max(mine, key=lambda b: b.acc)
+            self.say("cash piled up on my pads, step on them to collect")
             return self._go(self.world.c[P0["pads"][b.slot]], stop=0.4)
         free = self._free_slot(0) >= 0
         worst = min((KINDS[b.kind][3] for b in mine), default=0)
@@ -565,6 +571,7 @@ class StealABrainrot(Env):
                  and (free or KINDS[b.kind][3] > worst) and b.pos[0] < 110]
         if cands and free:
             b = max(cands, key=lambda b: KINDS[b.kind][3] - 0.02 * np.linalg.norm(b.pos - p.pos))
+            self.say("affordable brainrot on the carpet, walk beside it and buy it")
             a = self._go(b.pos + [CONVEYOR_SPEED * 0.6, 0, 0], stop=3.0)
             pr = self.active_prompt()
             if pr is self.br_prompts.get(b.id):
@@ -575,11 +582,13 @@ class StealABrainrot(Env):
                    and KINDS[b.kind][3] > best_inc and free]
         if targets:
             b = max(targets, key=lambda b: KINDS[b.kind][3] - 0.05 * np.linalg.norm(b.pos - p.pos))
+            self.say("rival base is unlocked with a better brainrot, steal it")
             a = self._go(b.pos, stop=2.5)
             pr = self.active_prompt()
             if pr is not None and pr is self.br_prompts.get(b.id):
                 a.keys = frozenset({"e"})
             return a
+        self.say("nothing worth buying, wait at my base")
         return self._go(P0["home"], stop=4.0)
 
     def _go(self, goal, stop=1.5) -> Action:

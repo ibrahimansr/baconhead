@@ -343,15 +343,20 @@ class Fisch(Env):
         nxt = self._next_rod()
         val = sum(v for *_, v in self.bag)
         if self.ui == "merchant":
+            self.say("merchant is open, click sell all" if self.bag else "nothing to sell, close the merchant")
             return self._click_ui("sell_all" if self.bag else "close")
         if self.ui == "shop":
             if nxt is not None and self.money >= RODS[nxt][1]:
+                self.say("rod shop is open, buy the next rod")
                 return self._click_ui(f"buy:{nxt}")
+            self.say("done shopping, close the rod shop")
             return self._click_ui("close")
         if self.phase == "shake":
+            self.say("fish is biting, click the shake button")
             x, y, w, h = self.shake_rect
             return self._point((x + w / 2, y + h / 2))
         if self.phase == "reel":
+            self.say("fish is hooked, hold click to keep it in the zone")
             w = RODS[self.rod][2]
             lead = 0.75 * self.fpos + 0.25 * self.ftarget         # aim a little toward where it's darting
             err = lead - (self.zone + w / 2)
@@ -361,25 +366,35 @@ class Fisch(Env):
             u = ((self.t - self.charge_t) / CHARGE_PERIOD) % 1.0
             rising = u < 0.5
             release = self.power >= 0.9 and rising
+            self.say("charging the cast, release near the top of the meter")
             return Action(keys=frozenset() if release else frozenset({"lmb"}), cursor=(0.5, 0.45))
         if self.phase == "wait":
+            self.say("bobber is in the water, wait for a bite")
             return Action(cursor=(0.5, 0.45))
         # idle: sell, upgrade, or go fish
         if len(self.bag) >= BAG or (self.bag and nxt is not None and self.money + val >= RODS[nxt][1] and self.money < RODS[nxt][1]):
+            self.say("backpack is full, go sell fish to the merchant" if len(self.bag) >= BAG else
+                     "fish are worth enough for a better rod, go sell them")
             return self._visit(MERCHANT + [0, 0, 3.5], 0)
         if nxt is not None and self.money >= RODS[nxt][1]:
+            self.say("enough money for a better rod, go to the rod shop")
             return self._visit(BOARD + [0, 0, 3.0], 1)
         d = float(np.linalg.norm((SPOT - p.pos)[[0, 2]]))
         if d > 1.2:
+            self.say("walk to the end of the pier to fish")
             return self._walk(SPOT, stop=0.8)
         yaw_err = math.degrees((0.0 - self.cam.yaw + math.pi) % (2 * math.pi) - math.pi)   # face the open water (+z)
         pitch = float(np.clip(math.degrees(math.radians(22) - self.cam.pitch), -10, 10))
         if abs(yaw_err) > 5:
+            self.say("at the end of the pier, turn to face the water")
             return Action(look_x=float(np.clip(yaw_err, -30, 30)), look_y=pitch, cursor=(0.5, 0.45))
         if self.equipped != "rod":
+            self.say("press 1 to equip the rod")
             return Action(keys=frozenset({"1"}), cursor=(0.5, 0.45))
         if self.mouse_held:   # still holding from the reel: a cast needs a fresh press
+            self.say("let go of the mouse before the next cast")
             return Action(look_y=pitch, cursor=(0.5, 0.45))
+        self.say("facing the water, hold click to start a cast")
         return Action(keys=frozenset({"lmb"}), look_y=pitch, cursor=(0.5, 0.45))
 
     def _walk(self, at, stop=1.0) -> Action:
@@ -411,12 +426,16 @@ class Fisch(Env):
         return Action(cursor=self.cursor)
 
     def potential(self) -> float:
-        """Line progress (charge → bite → shake → reel) plus closeness to wherever the expert is headed."""
+        """Line progress (charge → bite → shake → reel), +1 per fish caught, plus closeness to wherever the expert is
+        headed. Finishing a step never lowers Φ: a landed fish (reel 1.0 → idle 0) is paid back by `caught`, and
+        charge = wait at the same power, so releasing a weak cast early earns nothing. (Was: catching dropped Φ by ~1
+        and an early release jumped +0.2, so GRPO's noop beat the expert's chunk on fisch on average.)"""
         self.expert()
-        phase = {"idle": 0.0, "charge": 0.1 + 0.1 * self.power, "wait": 0.3,
+        cast = 0.15 + 0.15 * self.power
+        phase = {"idle": 0.0, "charge": cast, "wait": cast,
                  "shake": 0.4 + 0.2 * (1 - self.shakes_left / 6), "reel": 0.6 + 0.4 * self.prog}[self.phase]
         dist = 0.0 if self.goal is None else float(np.linalg.norm((self.goal - self.player.pos)[[0, 2]]))
-        return phase - 0.01 * dist
+        return phase + self.caught - 0.01 * dist
 
 
 if __name__ == "__main__":

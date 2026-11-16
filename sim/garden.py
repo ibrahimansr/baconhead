@@ -357,12 +357,16 @@ class GrowAGarden(Env):
         if self.ui == "seeds":
             free = GRID * GRID - len(self.plants) - sum(self.seeds.values())
             k = self._best_seed(free)
+            self.say("seed shop is open, buy the best seed i can afford" if k else "done buying seeds, close the seed shop")
             return self._click_ui(f"buy:{k}" if k else "close")
         if self.ui == "gear":
+            buy = self.can_uses == 0 and self.sheckles >= CAN_PRICE + 20
+            self.say("gear shop is open, buy a watering can" if buy else "done here, close the gear shop")
             return self._click_ui("buy_can" if self.can_uses == 0 and self.sheckles >= CAN_PRICE + 20 else "close")
         ripe = [f for c, pl in self.plants.items() for f in pl.fruits if pl.age >= f.ripe_at]
         if ripe:
             f = min(ripe, key=lambda f: np.linalg.norm(f.pos - p.pos))
+            self.say("fruit is ripe, walk over and collect it")
             a = self._go(f.pos, stop=1.8)
             if self.active_prompt() is self.fruit_prompts.get(f.id):
                 a.keys = a.keys | {"e"}
@@ -371,20 +375,27 @@ class GrowAGarden(Env):
         free_cells = [(i, j) for j in range(GRID) for i in range(GRID) if (i, j) not in self.plants]
         if has_seed and free_cells:
             k = max(has_seed, key=lambda k: SEEDS[k][0])
+            self.say("seeds in the hotbar, plant them in empty soil")
             return self._use_on_cell(k, min(free_cells, key=lambda c: np.linalg.norm(np.array(self._cell_center(c)) - p.pos[[0, 2]])))
         inv_value = sum(v for _, v, _ in self.inventory)
         if self.inventory and (inv_value >= 40 or not self.plants or self._best_seed(len(free_cells), self.sheckles + inv_value)):
+            self.say("carrying fruit, walk to steven and sell it")
             return self._prompt_at(STEVEN, self.statics[1])
         if free_cells and self._best_seed(len(free_cells)):
+            self.say("empty soil and sheckles to spend, buy seeds from sam")
             return self._prompt_at(SAM, self.statics[0])
         growing = [pl for pl in self.plants.values() if not any(pl.age >= f.ripe_at for f in pl.fruits)]
         if growing and self.can_uses > 0:
             pl = max(growing, key=lambda pl: SEEDS[pl.kind][3])
+            self.say("plants are growing, water them with the watering can")
             return self._use_on_cell("Watering Can", pl.cell)
         if self.can_uses == 0 and self.sheckles >= CAN_PRICE + 40 and len(self.plants) >= 4:
+            self.say("no watering can, buy one at the gear shop")
             return self._prompt_at(GEAR, self.statics[2])
         if self.equipped:
+            self.say("nothing to plant, put away the held item")
             return self._click_ui(f"slot:{self.items().index(self.equipped)}") if self.equipped in self.items() else Action(cursor=self.cursor)
+        self.say("plants are growing, wait by the garden")
         return self._go(PLOT_C + [0, 0, -GRID * CELL / 2 - 3], stop=3)
 
     def _best_seed(self, free: int, cash: float | None = None):

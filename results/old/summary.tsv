@@ -1,0 +1,19 @@
+run	model	what	norm	open_loop_same/change/plan_switch	gold_goals	videos
+zero-shot	Qwen2.5-VL-3B	no training	0.00	0.43/0.30/-	-	-
+smolvlm256m_sft_v2	SmolVLM-256M	SFT, no history	-0.06	0.87/0.54/-	-	-
+smolvlm256m_dagger1	SmolVLM-256M	+1 DAgger round	0.01	0.86/0.54/-	-	-
+grpo_v3	Qwen2.5-VL-3B	GRPO beta 0, shaped reward	-	-	-	collapsed to stand-still (grpo_v3_*)
+qwen2.5-vl-3b_sft_v3_ck1000	Qwen2.5-VL-3B	SFT 1000 steps	-0.00	0.80/0.57/-	-	-
+qwen2.5-vl-3b_sft_v3	Qwen2.5-VL-3B	SFT 3000 steps, actions only	-0.07	0.84/0.62/-	0/10 (120s)	bench/play_qwen2.5-vl-3b_sft_v3/
+grpo_v4/v5	Qwen2.5-VL-3B	GRPO on sft_v3, fixed reward	-	-	-	v4 hold-W collapse, v5 flat; cancelled
+sft_plan_v1	Qwen2.5-VL-3B	SFT 2000 steps, PLAN+actions, objective+prev plan	0.13	0.91/0.63/0.70	0/10 (60s)	bench/play_sft_plan_v1/
+dagger_plan_v1_r0	Qwen2.5-VL-3B	+1 DAgger round	-0.00	-	-	-
+grpo_plan_v1	Qwen2.5-VL-3B	GRPO 150 steps on sft_plan_v1, strict reward	-0.02	0.87/0.58/0.25	1/10 (150s, forest by wandering)	bench/play_grpo_plan_v1/, bench/play_grpo_ck50/
+sft_plandir_v1	Qwen2.5-VL-3B	+target left/right in plans	not evaluated	-	-	-
+scripted expert	-	teacher	1.00	-	6/10 at 60s, 10/10 at 150s, 47/50 over 5 seeds	-
+gold solutions	-	hand-written per level	-	-	10/10	../gold/
+gpt-6.1-sol	API	zero-shot, thinking, told the goal	-	-	3/10 (mm2, garden, adoptme)	frontier/gpt-6.1-sol/
+qwen3.5-4b	Qwen3.5-4B	zero-shot, strict parser	-	-	0/10 (format failures)	frontier/qwen3.5-4b/
+qwen3.5-4b_lenient	Qwen3.5-4B	zero-shot, lenient parser	-	-	0/10 (never turns)	frontier/qwen3.5-4b_lenient/
+hold W	-	baseline	-0.05	-	0/10	videos/baseline_walk/
+side by side	-	2x2: gold, gpt-6.1-sol / SFT+plans, GRPO	-	-	-	videos/compare/

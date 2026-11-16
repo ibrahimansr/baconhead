@@ -395,6 +395,10 @@ class Env:
     def on_world_click(self, part: int) -> None: ...
     def respawn_point(self) -> np.ndarray: return np.zeros(3)
     def expert(self) -> Action: return Action()
+    def say(self, plan: str) -> None:
+        """Experts call this on every decision path: what a player would say they're doing now, in terms of what's on
+        screen (never coordinates or hidden state). It's the PLAN line the policy learns to write before its inputs."""
+        self.plan = plan
     def potential(self) -> float: return 0.0   # dense progress score for reward shaping; games with sparse rewards override
     def info(self) -> dict: return {}
     def score(self) -> float: return 0.0      # the one eval number, higher is better
@@ -407,6 +411,7 @@ class Env:
         self.reward = 0.0
         self.done = False
         self.deaths = 0
+        self.plan = ""                              # the expert's current subgoal in words (see say())
         self.world = World()
         self.prompts: list[Prompt] = []
         self.cam = Camera()

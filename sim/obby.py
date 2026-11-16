@@ -134,11 +134,13 @@ class Obby(Env):
             s = r.uniform(max(1.5, 4 - 2.5 * d), 5 - 2 * d)
             stones.append((length + g + s / 2, s, r.uniform(-2, 2) * d))
             length += g + s
-        length += self._gap(d * 0.8)
+        self._gap(d * 0.8)   # drawn but unused, so every other course keeps its exact layout
         floor = self._at(pos, hd, 0, length / 2, -0.5)
         self.world.add(floor + [0, -0.25, 0], (10, 1, length), KILL, kill=True, neon=True, yaw=hd)
         for z, s, lat in stones:
             self._wp(self._plat(self._at(pos, hd, lat, z, 0.8), (s, 1.3, s), hd))
+        # end at the last stone's far edge like every segment: ending a jump-gap past it, plus the checkpoint's own
+        # gap, made 9.7-12 stud jumps (max is ~10, safe ~8.3); 2 of 16 eval courses were impossible there
         return self._at(pos, hd, 0, length, 0)
 
     def _seg_beam(self, pos, hd, d):
@@ -158,7 +160,12 @@ class Obby(Env):
         for k in range(r.integers(3, 6)):
             g = self._gap(d * 0.7)
             top = self._at(pos, hd, 0, g + 2, 0)
-            m = Motion("vanish", period=period, phase=r.uniform(0, 1), on_frac=0.65)
+            ph = r.uniform(0, 1)
+            if k == 0:
+                ph0 = ph
+            # each part turns solid 0.8 s after the one before, a wave you can run with. Independent random phases made
+            # some chains impossible (seed 999000 stage 16: three parts fading together, ~0.16 s short at full speed)
+            m = Motion("vanish", period=period, phase=(ph0 - k * 0.8 / period) % 1.0, on_frac=0.65)
             self._wp(self._plat(top, (4, 1, 4), hd, motion=m))
             pos = self._at(top, hd, 0, 2, 0)
         return pos
@@ -271,6 +278,7 @@ class Obby(Env):
     def expert(self) -> Action:
         p = self.player
         if not p.alive:
+            self.say("fell off, wait to respawn at the last checkpoint")
             return Action(cursor=self.cursor)
         k = self._wp_on()
         base = k if k >= 0 else self.best_wp
@@ -284,7 +292,16 @@ class Obby(Env):
                 if s > best_score:
                     best, best_score = (wait, jump_at), s
         wait, jump_at = best
+        if wait > 0:
+            self.say("the next platform is moving or blocked, wait for the right moment")
+        elif jump_at == 0:
+            self.say("at the edge, jump to the next platform now")
+        elif jump_at is not None:
+            self.say("run toward the edge, then jump to the next platform")
+        else:
+            self.say("walk onto the next platform")
         tgt = self.wp_point(tgt_k)
+        self.goal = tgt   # read only by train.dataset.with_dir (the plan's direction word)
         a = self.steer_to(tgt, keys=() if wait > 0 else ("w",), jump=(jump_at == 0 and wait == 0), stop_dist=0.3)
         pitch_err = math.degrees(math.radians(30) - self.cam.pitch)
         a.look_y = float(np.clip(pitch_err, -10, 10))
