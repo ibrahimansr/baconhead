@@ -1,0 +1,19 @@
+{
+ "game": "disaster",
+ "seed": 999000,
+ "kw": {},
+ "ticks": 600,
+ "goal": "survive the first disaster (Acid Rain)",
+ "reached_at": null,
+ "score": 0.0,
+ "deaths": 0,
+ "info": {
+  "wins": 0,
+  "rounds": 1,
+  "phase": "disaster",
+  "disaster": "acid",
+  "health": 100,
+  "deaths": 0
+ },
+ "parse_fail": 0.0
+}

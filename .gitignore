@@ -1,28 +1,17 @@
-# Environment
 .env
 .venv/
-
-# Python
 __pycache__/
 *.pyc
 *.pyo
-
-# World model weights
 *.pt
 *.pth
-
-# Recorded episodes (human demos + agent runs)
-demos/
-
-# Logs
 *.log
-
-# macOS
 .DS_Store
-
-# IDE
 .idea/
 .vscode/
-
-# Personal design notes
-DESIGN.md
+runs/
+ckpts/
+logs/
+data/
+models/
+artifacts/

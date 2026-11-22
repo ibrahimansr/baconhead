@@ -1,0 +1,17 @@
+{
+ "game": "brainrot",
+ "seed": 999000,
+ "kw": {},
+ "ticks": 600,
+ "goal": "buy a brainrot and collect its earnings (net worth above the starting $100)",
+ "reached_at": null,
+ "score": 2.0,
+ "deaths": 0,
+ "info": {
+  "cash": 100.0,
+  "income": 0,
+  "owned": 0,
+  "networth": 100.0
+ },
+ "parse_fail": 0.013333333333333334
+}

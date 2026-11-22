@@ -1,0 +1,22 @@
+{
+ "game": "mm2",
+ "seed": 999000,
+ "kw": {
+  "role": "sheriff"
+ },
+ "ticks": 600,
+ "goal": "as Sheriff, shoot the Murderer and win the first round",
+ "reached_at": 97,
+ "score": 0.6666666666666666,
+ "deaths": 1,
+ "info": {
+  "role": "lobby",
+  "phase": "lobby",
+  "coins": 0,
+  "rounds": 3,
+  "wins": 2,
+  "alive": 8,
+  "deaths": 1
+ },
+ "parse_fail": 0.0
+}

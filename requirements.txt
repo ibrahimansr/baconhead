@@ -1,14 +1,15 @@
-# baconhead — latent world model + imitation prior + Claude (Python 3.13, macOS)
-pyobjc-framework-Quartz>=10.0   # CGEventTap, CGEvent injection, window list, clock
-mss>=9.0.0                      # screen capture
-numpy>=1.24.0
-pillow>=9.0.0
-torch>=2.2.0                    # the world model
-anthropic>=0.40.0               # Claude — goals, plan selection, reward
-python-dotenv>=1.0.0
-
-# Only needed for --hf imitation pretraining (wm/data.py:load_hf):
-#   pip install datasets
-
-# Cloud training (wm/modal_train.py):
-#   pip install modal && modal setup
+numpy>=1.26
+pillow>=10.1
+torch>=2.4
+torchvision
+transformers>=5.20
+trl>=1.14
+peft
+datasets
+accelerate
+modal>=1.0
+requests
+mss
+pyobjc-framework-Quartz
+pyobjc-framework-Cocoa
+pandas
