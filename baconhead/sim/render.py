@@ -1,23 +1,10 @@
-"""Batched box raycaster in plain torch: every Roblox part is a box, so one slab test renders the world.
-
-Same code on CPU, MPS, and CUDA. The player's window and the agent's observations come from this one
-function, so what you play is what the model trains on.
-
-Two passes:
-  1. primary rays, tile-culled: each TILE×TILE block of pixels only tests the M boxes whose screen
-     bounding rect touches it (M is typically 10-25 of K=64-128), so cost ≈ B·H·W·M.
-  2. sun shadow rays at 1/3 resolution against every box, since shadow casters can be off-screen.
-"""
-
-from __future__ import annotations
-
 import math
 import os
 
 import numpy as np
 import torch
 
-from sim import hud as hudlib
+from baconhead.sim import hud as hudlib
 
 TILE = 16
 SHADOW_STRIDE = 3   # shadow rays every 3rd pixel each way: 1/9 the cost, upsampled bilinearly
@@ -39,9 +26,8 @@ def _pack(scenes, device, bucket=16):
     return T(c), T(h), T(yaw), T(col), T(neon)
 
 
+# nearest box along each ray. o (N,P,3) or (N,1,3), d (N,P,3); boxes c,h (N,K,3), cy/sy (N,K). Returns t (N,P) with inf for misses, box index, and the hit's local-frame normal and point
 def _trace(o, d, c, h, cy, sy, want_normal=True):
-    """Nearest box along each ray. o (N,P,3) or (N,1,3), d (N,P,3); boxes c,h (N,K,3), cy/sy (N,K).
-    Returns t (N,P) with inf for misses, box index, and the hit's local-frame normal and point."""
     rel = o[:, :, None, :] - c[:, None, :, :]                                   # (N,P|1,K,3)
     cyk, syk = cy[:, None, :], sy[:, None, :]                                   # (N,1,K)
     lo = torch.stack([cyk * rel[..., 0] - syk * rel[..., 2], rel[..., 1].expand_as(cyk * rel[..., 0]),
@@ -70,8 +56,8 @@ def _trace(o, d, c, h, cy, sy, want_normal=True):
     return tbest, ib, n_l, p_l
 
 
+# per tile: hit distance, world normal, albedo, neon flag, and distance to the nearest face edge
 def _primary(cam, d, c, h, yaw, col, neon):
-    """Per tile: hit distance, world normal, albedo, neon flag, and distance to the nearest face edge."""
     cy, sy = torch.cos(yaw), torch.sin(yaw)
     t, ib, n_l, p_l = _trace(cam, d, c, h, cy, sy)
     cyb, syb = cy.gather(1, ib), sy.gather(1, ib)
@@ -94,8 +80,8 @@ if os.environ.get("BH_COMPILE", "1") == "1":   # ~5x on CPU; BH_COMPILE=0 to deb
     _shadow = torch.compile(_shadow)
 
 
+# which boxes can appear in each screen tile, from each box's projected corner bounds
 def _tile_lists(cam, f, r, up, th, aspect, c, h, yaw, TY, TX):
-    """Which boxes can appear in each screen tile, from each box's projected corner bounds."""
     B, K = c.shape[:2]
     sg = _SIGNS.to(c.device)
     loc = sg[None, None] * h[:, :, None, :]                                     # (B,K,8,3)
@@ -125,9 +111,9 @@ def _tile_lists(cam, f, r, up, th, aspect, c, h, yaw, TY, TX):
     return order, m.sum(-1)
 
 
+# scenes from Env.scene() → (B, H, W, 3) uint8 on device
 @torch.no_grad()
-def render(scenes: list, H: int, W: int, device="cpu", shadows=True, hud=True, chrome=True, augment=None) -> torch.Tensor:
-    """scenes from Env.scene() → (B, H, W, 3) uint8 on device."""
+def render(scenes, H, W, device="cpu", shadows=True, hud=True, chrome=True, augment=None):
     B = len(scenes)
     c, h, yaw, col, neon = _pack(scenes, device)
     K = c.shape[1]
@@ -239,7 +225,7 @@ def render(scenes: list, H: int, W: int, device="cpu", shadows=True, hud=True, c
     return img
 
 
-def best_device() -> str:
+def best_device():
     if torch.cuda.is_available():
         return "cuda"
     if torch.backends.mps.is_available():

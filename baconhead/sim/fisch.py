@@ -1,21 +1,9 @@
-"""Fisch: a fishing island. The loop is the real game's:
-
-  equip the rod (1) at the water's edge → hold left mouse to charge the cast (the meter rises and falls;
-  release near the top for a Perfect cast) → wait for a bite (the bobber gets a "!") → SHAKE: click the
-  Shake button, which jumps somewhere new after each click → REEL: hold left mouse to push your white zone
-  right, release and it drifts left; keep the fish inside it until the progress bar fills (empty = it gets away)
-  → sell at the Merchant ("Sell All") → buy better rods at the Rod Shop board (bigger zone, faster lure, luck).
-Rarer fish dart harder. Currency is C$.
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Humanoid, Prompt, avatar_boxes, hotbar_hud, right_xz, forward_xz
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Humanoid, Prompt, avatar_boxes, hotbar_hud, right_xz, forward_xz
 
 # (tier, spawn weight, agility, colour, [(name, base C$, base kg)])
 TIERS = [
@@ -41,7 +29,7 @@ MERCHANT = np.array([9.0, 0.0, -6.0])
 BOARD = np.array([-9.0, 0.0, -6.0])
 
 
-def _on_land(x, z) -> bool:
+def _on_land(x, z):
     return (abs(x) < 30 and -40 < z < 0) or (abs(x) < 3 and 0 <= z < 30)   # island or pier
 
 
@@ -49,7 +37,7 @@ class Fisch(Env):
     name = "fisch"
     train_steps = 3000
 
-    def build(self) -> None:
+    def build(self):
         w = self.world
         self.max_steps = int(self.kw.get("max_steps", self.train_steps))
         w.add((0, -0.4, 0), (500, 0.2, 500), (0.15, 0.45, 0.75), collide=False)       # the water surface
@@ -76,11 +64,11 @@ class Fisch(Env):
         self.prompts = [Prompt(pos=MERCHANT + [0, 2.5, 0], action="Talk", obj="Merchant", hold=0.3, on_trigger=("_open", "merchant")),
                         Prompt(pos=BOARD + [0, 2.5, 0.8], action="Browse", obj="Rod Shop", hold=0.3, on_trigger=("_open", "shop"))]
         self.money = 0.0
-        self.bag: list[tuple] = []                 # (name, tier index, kg, value)
+        self.bag = []                 # (name, tier index, kg, value)
         self.rods_owned = [0]
         self.rod = 0
         self.equipped = None
-        self.ui = None                             # None | "merchant" | "shop"
+        self.ui = None                             # none | "merchant" | "shop"
         self.phase = "idle"                        # idle | charge | wait | shake | reel
         self.power = 0.0
         self.perfect = False
@@ -100,18 +88,18 @@ class Fisch(Env):
         return np.array([0.0, 0.0, -15.0])
 
     # ── economy ──
-    def _networth(self) -> float:
+    def _networth(self):
         return self.money + sum(v for *_, v in self.bag) + sum(RODS[i][1] for i in self.rods_owned)
 
-    def score(self) -> float:
+    def score(self):
         return math.log10(max(1.0, self._networth()))
 
-    def info(self) -> dict:
+    def info(self):
         return dict(money=round(self.money), bag=len(self.bag), caught=self.caught, rod=RODS[self.rod][0],
                     networth=round(self._networth()))
 
     # ── input ──
-    def on_key(self, k: str) -> None:
+    def on_key(self, k):
         if k == "1":
             self._toggle_rod()
 
@@ -123,10 +111,10 @@ class Fisch(Env):
     def _reset_line(self):
         self.phase, self.bob, self.fish = "idle", None, None
 
-    def _open(self, which: str):
+    def _open(self, which):
         self.ui = which
 
-    def on_ui(self, id_: str) -> None:
+    def on_ui(self, id_):
         if id_ == "slot:0":
             self._toggle_rod()
         elif id_ == "close":
@@ -155,13 +143,13 @@ class Fisch(Env):
             else:
                 self._move_shake()
 
-    def _over_ui(self) -> bool:
+    def _over_ui(self):
         x, y = self.cursor
         return any(el.get("id") and el["rect"][0] <= x <= el["rect"][0] + el["rect"][2] and el["rect"][1] <= y <= el["rect"][1] + el["rect"][3]
                    for el in self.ui_layers())
 
     # ── the fishing state machine ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         p = self.player
         held = self.mouse_held and not self.menu
         press = held and not self._lmb_prev
@@ -236,7 +224,7 @@ class Fisch(Env):
         self.fpos = self.ftarget = 0.5
         self.fnext = self.t
 
-    def _reel_step(self, held: bool):
+    def _reel_step(self, held):
         w = RODS[self.rod][2]
         agility = TIERS[self.fish[0]][2]
         self.zone_v = float(np.clip(self.zone_v + (ZONE_ACCEL if held else -ZONE_ACCEL) * DT, -ZONE_VMAX, ZONE_VMAX))
@@ -266,7 +254,7 @@ class Fisch(Env):
             self._reset_line()
 
     # ── drawing ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = avatar_boxes(self.merchant)
         p = self.player
         if self.equipped == "rod" and p.alive:
@@ -278,7 +266,7 @@ class Fisch(Env):
             out.append((tuple(self.bob + [0, 0.55, 0]), (0.6, 0.4, 0.6), 0.0, (1, 1, 1)))
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         val = sum(v for *_, v in self.bag)
         els = [dict(kind="leaderboard", cols=["C$"], rows=[["You", f"{self.money:.0f}"]]),
                dict(kind="text", rect=(0.02, 0.1, 0.25, 0.05), text=f"C$ {self.money:.0f}", size=26, color=(1.0, 0.85, 0.3)),
@@ -310,7 +298,7 @@ class Fisch(Env):
         els += self._ui_els()
         return els
 
-    def _ui_els(self) -> list:
+    def _ui_els(self):
         if self.ui == "merchant":
             val = sum(v for *_, v in self.bag)
             return [dict(kind="panel", rect=(0.32, 0.3, 0.36, 0.34), color=(0.95, 0.92, 0.85), alpha=0.97),
@@ -337,7 +325,7 @@ class Fisch(Env):
         nxt = self.rod + 1
         return nxt if nxt < len(RODS) else None
 
-    def expert(self) -> Action:
+    def expert(self):
         self.goal = None
         p = self.player
         nxt = self._next_rod()
@@ -397,8 +385,8 @@ class Fisch(Env):
         self.say("facing the water, hold click to start a cast")
         return Action(keys=frozenset({"lmb"}), look_y=pitch, cursor=(0.5, 0.45))
 
-    def _walk(self, at, stop=1.0) -> Action:
-        """The pier is a narrow plank over water: get on or off it through its base, never diagonally."""
+    # the pier is a narrow plank over water: get on or off it through its base, never diagonally
+    def _walk(self, at, stop=1.0):
         self.goal = at
         p = self.player.pos
         crossing = (p[2] > -1) != (at[2] > -1)
@@ -407,29 +395,26 @@ class Fisch(Env):
             return self.steer_to(np.array([0.0, 0, -4.0]), stop_dist=0.5)
         return self.steer_to(at, stop_dist=stop)
 
-    def _visit(self, at, prompt_i) -> Action:
+    def _visit(self, at, prompt_i):
         a = self._walk(at)
         if self.active_prompt() is self.prompts[prompt_i]:
             a.keys = a.keys | {"e"}
         return a
 
-    def _point(self, uv) -> Action:
-        """Cursor onto the target first, click on the next tick once it's there."""
+    # cursor onto the target first, click on the next tick once it's there
+    def _point(self, uv):
         on = abs(self.cursor[0] - uv[0]) < 0.012 and abs(self.cursor[1] - uv[1]) < 0.02
         return Action(cursor=tuple(uv), click=on)
 
-    def _click_ui(self, id_) -> Action:
+    def _click_ui(self, id_):
         for el in self.hud():
             if el.get("id") == id_:
                 x, y, w, h = el["rect"]
                 return self._point((x + w / 2, y + h / 2))
         return Action(cursor=self.cursor)
 
-    def potential(self) -> float:
-        """Line progress (charge → bite → shake → reel), +1 per fish caught, plus closeness to wherever the expert is
-        headed. Finishing a step never lowers Φ: a landed fish (reel 1.0 → idle 0) is paid back by `caught`, and
-        charge = wait at the same power, so releasing a weak cast early earns nothing. (Was: catching dropped Φ by ~1
-        and an early release jumped +0.2, so GRPO's noop beat the expert's chunk on fisch on average.)"""
+    # line progress (charge → bite → shake → reel), +1 per fish caught, plus closeness to wherever the expert is headed. Finishing a step never lowers Φ: a landed fish (reel 1.0 → idle 0) is paid back by `caught`, and charge = wait at the same power, so releasing a weak cast early earns nothing. (Was: catching dropped Φ by ~1 and an early release jumped +0.2, so GRPO's noop beat the expert's chunk on fisch on average.)
+    def potential(self):
         self.expert()
         cast = 0.15 + 0.15 * self.power
         phase = {"idle": 0.0, "charge": cast, "wait": cast,
@@ -441,7 +426,7 @@ class Fisch(Env):
 if __name__ == "__main__":
     import pickle
     import time
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     T = 3000   # 5 minutes
     for seed in (0, 1, 2):
         env = Fisch(seed=seed, max_steps=T)

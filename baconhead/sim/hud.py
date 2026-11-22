@@ -1,11 +1,3 @@
-"""Roblox-style 2D UI drawn with PIL: top bar, leaderboard, proximity prompts, billboards, buttons, toasts.
-
-Every element is in normalized screen coords, so the same list draws at the agent's 256x144 and the
-player's 1280x720, and the same rects are what clicks hit-test against.
-"""
-
-from __future__ import annotations
-
 from functools import lru_cache
 
 import numpy as np
@@ -13,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 @lru_cache(maxsize=64)
-def font(px: int):
+def font(px):
     return ImageFont.load_default(size=max(6, px))
 
 
@@ -21,8 +13,8 @@ def _c(col, a=1.0):
     return tuple(int(255 * max(0, min(1, x))) for x in col[:3]) + (int(255 * a),)
 
 
-def draw(elements: list, rgb: np.ndarray, chrome: bool = True) -> np.ndarray:
-    """Draws the UI onto an (H, W, 3) uint8 frame. Draw(RGB, "RGBA") alpha-blends each shape as it lands."""
+# draws the UI onto an (H, W, 3) uint8 frame. Draw(RGB, "RGBA") alpha-blends each shape as it lands
+def draw(elements, rgb, chrome=True):
     im = Image.fromarray(rgb)
     W, H = im.size
     d = ImageDraw.Draw(im, "RGBA")
@@ -88,8 +80,8 @@ def _text_center(d, xy, text, px, col, s):
         d.text((xy[0], y), line, font=font(px), fill=_c(col), anchor="mm", stroke_width=max(1, int(1.5 * s)), stroke_fill=(0, 0, 0, 220))
 
 
+# the two rounded buttons every Roblox experience has top-left: the menu and chat
 def _topbar(d, W, H, s):
-    """The two rounded buttons every Roblox experience has top-left: the menu and chat."""
     r, pad, sz = int(10 * s), int(12 * s), int(44 * s)
     for i in range(2):
         x = pad + i * (sz + int(8 * s))
@@ -101,8 +93,8 @@ def _topbar(d, W, H, s):
             d.rounded_rectangle((x + m, pad + m, x + sz - m, pad + sz - m - int(4 * s)), radius=int(5 * s), fill=(255, 255, 255, 230))
 
 
+# top-right player list with leaderstats, which is where obbies show Stage and simulators show Cash
 def _leaderboard(d, W, H, s, cols, rows):
-    """Top-right player list with leaderstats, which is where obbies show Stage and simulators show Cash."""
     rw, rh = int(90 * s) * (len(cols) + 1), int(26 * s)
     x0, y0 = W - rw - int(10 * s), int(10 * s)
     d.rounded_rectangle((x0, y0, x0 + rw, y0 + rh * (len(rows) + 1)), radius=int(6 * s), fill=(20, 20, 20, 150))
@@ -116,8 +108,8 @@ def _leaderboard(d, W, H, s, cols, rows):
             d.text((x0 + cw * j + cw / 2, y), str(val), font=f, fill=(255, 255, 255, 255), anchor="mm")
 
 
+# A ProximityPrompt: key cap with the hold ring on the left, object and action text on the right
 def _prompt(d, W, H, s, el):
-    """A ProximityPrompt: key cap with the hold ring on the left, object and action text on the right."""
     u, v = el["at"]
     x, y = u * W + 20 * s, v * H - 36 * s
     w, h = 190 * s, 72 * s

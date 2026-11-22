@@ -1,0 +1,16 @@
+{
+ "game": "adoptme",
+ "seed": 999000,
+ "kw": {},
+ "ticks": 600,
+ "goal": "feed the hungry pet (one task done)",
+ "reached_at": 115,
+ "score": 2.0,
+ "deaths": 0,
+ "info": {
+  "bucks": 52,
+  "tasks_done": 2,
+  "needs": 2
+ },
+ "parse_fail": 0.0
+}

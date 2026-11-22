@@ -1,20 +1,9 @@
-"""99 Nights in the Forest: keep the campfire alive, stay fed, and stay in its light when The Deer comes.
-
-Loop, as in the real game: by day, equip the axe (slot 1), chop trees (click or hold left mouse next to a
-trunk; 4 hits fell it and drop a log), pick logs up into your sack (3 max), and hold E "Add Fuel" at the
-campfire. Fuel drains constantly; the fire's light radius scales with fuel. Eat berries (E) before hunger
-runs out. At night The Deer stalks anyone outside the light and mauls on contact; inside the light it
-can only circle. Survive the night → +1.
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Humanoid, Prompt, health_hud, hotbar_hud, night_theme, npc_walk
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Humanoid, Prompt, health_hud, hotbar_hud, night_theme, npc_walk
 
 DAY_S, NIGHT_S = 60.0, 45.0
 CYCLE = DAY_S + NIGHT_S
@@ -28,16 +17,16 @@ DEER_SPEED, DEER_HIT, DEER_CD = 0.85, 35.0, 2.0   # speed as a fraction of WalkS
 FIRE = np.array([0.0, 0.0, 0.0])
 
 
-def light_radius(fuel: float) -> float:
+def light_radius(fuel):
     return 0.0 if fuel <= 0 else 6.0 + 0.3 * fuel
 
 
 class NinetyNineNights(Env):
     name = "forest"
     train_steps = 3000
-    eval_kw: dict = {}
+    eval_kw = {}
 
-    def build(self) -> None:
+    def build(self):
         r, w = self.rng, self.world
         self.max_steps = int(self.kw.get("max_steps", self.train_steps))
         w.add((0, -0.5, 0), (320, 1, 320), (0.22, 0.42, 0.18))                                     # forest floor
@@ -78,7 +67,7 @@ class NinetyNineNights(Env):
                                on_trigger=("_add_fuel",), enabled=("_has_logs",))]
         self.prompts += [Prompt(pos=b[2] + [0, 2, 0], action="Eat", obj="Berry Bush", hold=0.5,
                                 on_trigger=("_eat", k), enabled=("_bush_ready", k)) for k, b in enumerate(self.bushes)]
-        self.logs: dict[int, np.ndarray] = {}          # id → position of a log lying on the ground
+        self.logs = {}          # id → position of a log lying on the ground
         self._log_id = 0
         self.sack = 0
         self.fuel = 70.0
@@ -99,17 +88,17 @@ class NinetyNineNights(Env):
         return np.array([4.0, 0.0, 4.0])
 
     # ── time of day ──
-    def phase(self) -> float:
+    def phase(self):
         return self.t % CYCLE
 
-    def is_night(self) -> bool:
+    def is_night(self):
         return self.phase() >= DAY_S
 
-    def day_num(self) -> int:
+    def day_num(self):
         return int(self.t // CYCLE) + 1
 
-    def _dark(self) -> float:
-        """0 day → 1 night, with 6 s dusk and dawn."""
+    # 0 day → 1 night, with 6 s dusk and dawn
+    def _dark(self):
         ph = self.phase()
         if ph < DAY_S - 6:
             return 0.0
@@ -119,57 +108,57 @@ class NinetyNineNights(Env):
             return (CYCLE - ph) / 6
         return 1.0
 
-    def in_light(self, p) -> bool:
+    def in_light(self, p):
         return float(np.hypot(*(p - FIRE)[[0, 2]])) < light_radius(self.fuel)
 
-    def scene_theme(self) -> dict:
+    def scene_theme(self):
         lr = light_radius(self.fuel)
         lights = [(0.0, 2.0, 0.0, lr * 1.3, 1.6, 0.85, 0.35)] if lr > 0 else []
         return night_theme(self.theme, 0.97 * self._dark(), lights=lights)
 
     # ── prompts ──
-    def _has_logs(self) -> bool:
+    def _has_logs(self):
         return self.sack > 0
 
-    def _add_fuel(self) -> None:
+    def _add_fuel(self):
         self.fuel = min(FUEL_MAX, self.fuel + FUEL_PER_LOG * self.sack)
         self.toast(f"Added {self.sack} log{'s' * (self.sack > 1)} to the fire")
         self.reward += 0.05 * self.sack
         self.sack = 0
 
-    def _bush_ready(self, k: int) -> bool:
+    def _bush_ready(self, k):
         return self.t >= self.bushes[k][1]
 
-    def _eat(self, k: int) -> None:
+    def _eat(self, k):
         self.hunger = min(100.0, self.hunger + 40)
         self.bushes[k][1] = self.t + 45.0
         self.world.visible0[self.bushes[k][0]] = self.world.visible[self.bushes[k][0]] = False
         self.reward += 0.05
 
-    def _pick_log(self, lid: int) -> None:
+    def _pick_log(self, lid):
         if lid in self.logs and self.sack < SACK:
             del self.logs[lid]
             self.sack += 1
 
-    def _sack_room(self) -> bool:
+    def _sack_room(self):
         return self.sack < SACK
 
     # ── axe ──
-    def on_key(self, k: str) -> None:
+    def on_key(self, k):
         if k == "1":
             self.equipped = None if self.equipped == "axe" else "axe"
 
-    def on_ui(self, id_: str) -> None:
+    def on_ui(self, id_):
         if id_ == "slot:0":
             self.equipped = None if self.equipped == "axe" else "axe"
 
-    def on_tool_click(self) -> bool:
+    def on_tool_click(self):
         if self.equipped != "axe":
             return False
         self._swing()
         return True
 
-    def _swing(self) -> None:
+    def _swing(self):
         if self.axe_cd > 0:
             return
         self.axe_cd, self.swing_t = AXE_CD, self.t
@@ -191,8 +180,8 @@ class NinetyNineNights(Env):
                                    on_trigger=("_pick_log", lid), enabled=("_sack_room",)))
         self.toast("Timber!", 1.2)
 
+    # the standing tree in reach, in front of you (body facing or camera)
     def target_tree(self):
-        """The standing tree in reach, in front of you (body facing or camera)."""
         p = self.player.pos
         best, bd = None, AXE_RANGE
         for tr in self.trees:
@@ -205,7 +194,7 @@ class NinetyNineNights(Env):
         return best
 
     # ── simulation ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         p = self.player
         self.axe_cd = max(0.0, self.axe_cd - DT)
         if self.mouse_held and self.equipped == "axe" and p.alive:   # holding the button keeps swinging
@@ -250,7 +239,7 @@ class NinetyNineNights(Env):
         if self.steps >= self.max_steps:
             self.done = True
 
-    def _deer(self) -> None:
+    def _deer(self):
         d, p = self.deer, self.player
         self.deer_cd = max(0.0, self.deer_cd - DT)
         if not self.is_night():   # by day it lurks at the far edge of the forest
@@ -279,16 +268,16 @@ class NinetyNineNights(Env):
             p.grounded = False
             self.toast("The Deer attacked you!", 1.5)
 
-    def on_death(self) -> None:
+    def on_death(self):
         self.reward -= 1.0
         self.sack = 0
 
-    def respawn(self) -> None:
+    def respawn(self):
         super().respawn()
         self.hunger = max(self.hunger, 60.0)
 
     # ── looks ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         for p in self.logs.values():
             out.append(((p[0], 0.45, p[2]), (0.9, 0.9, 3.2), 0.6, (0.48, 0.3, 0.16)))
@@ -316,7 +305,7 @@ class NinetyNineNights(Env):
             out.append(((h.pos[0] + ox * 3.0, h.pos[1] + 3.0, h.pos[2] + oz * 3.0), (0.9, 0.7, 0.2), ang, (0.7, 0.7, 0.75)))
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         night = self.is_night()
         left = (CYCLE - self.phase()) if night else (DAY_S - self.phase())
         els = [dict(kind="text", rect=(0.35, 0.02, 0.3, 0.06), text=f"{'Night' if night else 'Day'} {self.day_num()}", size=32, align="center",
@@ -333,14 +322,14 @@ class NinetyNineNights(Env):
             els.append(b)
         return els
 
-    def info(self) -> dict:
+    def info(self):
         return dict(nights=self.nights, day=self.day_num(), fuel=round(self.fuel), hunger=round(self.hunger),
                     health=round(self.player.health), deaths=self.deaths, sack=self.sack)
 
-    def score(self) -> float:
+    def score(self):
         return float(self.nights)
 
-    def potential(self) -> float:
+    def potential(self):
         p = self.player
         phi = 0.6 * self.fuel / FUEL_MAX + 0.3 * self.hunger / 100 + 0.5 * p.health / 100 + 0.1 * self.sack
         if self.is_night():
@@ -352,7 +341,7 @@ class NinetyNineNights(Env):
         return phi
 
     # ── expert: chop, haul, feed the fire, eat, and never be outside the light at night ──
-    def expert(self) -> Action:
+    def expert(self):
         p = self.player
         if not p.alive:
             self.say("you died, wait to respawn at camp")
@@ -403,8 +392,8 @@ class NinetyNineNights(Env):
             self.say("walk to the nearest tree to chop it")
         return a
 
-    def _go(self, goal, stop=1.5) -> Action:
-        """Walk at goal, detouring around trunks and rocks a straight line would push into."""
+    # walk at goal, detouring around trunks and rocks a straight line would push into
+    def _go(self, goal, stop=1.5):
         self.goal = np.asarray(goal, float)
         p = self.player.pos
         d = (self.goal - p)[[0, 2]]
@@ -424,8 +413,8 @@ class NinetyNineNights(Env):
                     break
         return self.steer_to(self.goal, stop_dist=stop)
 
-    def _go_prompt(self, where, fn: str) -> Action:
-        """Walk up to a prompt and hold E on it, letting go once it fires so the next one can."""
+    # walk up to a prompt and hold E on it, letting go once it fires so the next one can
+    def _go_prompt(self, where, fn):
         a = self._go(where, stop=2.0)
         pr = self.active_prompt()
         if pr is not None and pr.on_trigger[0] == fn:
@@ -437,7 +426,7 @@ if __name__ == "__main__":
     import pickle
     import sys
     import time
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     ticks = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
     for seed in (0, 1, 2):
         env = NinetyNineNights(seed=seed, max_steps=ticks)

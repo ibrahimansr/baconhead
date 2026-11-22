@@ -1,7 +1,3 @@
-"""Make every run reconstructible from its directory: command, git SHA, dirty diff, config, seed, metrics."""
-
-from __future__ import annotations
-
 import json
 import os
 import subprocess
@@ -9,7 +5,7 @@ import sys
 import time
 
 
-def start(out_dir: str, config: dict, git: dict | None = None) -> str:
+def start(out_dir, config, git=None):
     os.makedirs(out_dir, exist_ok=True)
     git = git or _git()
     with open(os.path.join(out_dir, "run.json"), "w") as f:
@@ -21,8 +17,8 @@ def start(out_dir: str, config: dict, git: dict | None = None) -> str:
     return out_dir
 
 
-def _git() -> dict:
-    """Local runs read git directly; Modal containers have no .git, so modal_app passes this in."""
+# local runs read git directly; Modal containers have no .git, so modal_app passes this in
+def _git():
     try:
         sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
         diff = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, timeout=5).stdout

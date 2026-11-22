@@ -1,32 +1,24 @@
-"""Roblox-faithful humanoid physics, parts, camera, prompts, and the base Env every game extends.
-
-Units are studs and seconds. Numbers are Roblox defaults unless marked as a calibration knob.
-y is up. Camera yaw 0 looks down +z; turning right increases yaw.
-"""
-
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
-from core.actions import Action, TICK_S
+from baconhead.core.actions import Action, TICK_S
 
 # ── Roblox defaults ───────────────────────────────────────────────────────────
-DT = 1 / 60                        # Roblox steps humanoids at 60 Hz (physics itself is 240 Hz; 60 is enough here)
+DT = 1 / 60                        # roblox steps humanoids at 60 Hz (physics itself is 240 Hz; 60 is enough here)
 SUBSTEPS = round(TICK_S / DT)      # 6 per agent tick
 GRAVITY = 196.2                    # workspace.Gravity
-WALK_SPEED = 16.0                  # Humanoid.WalkSpeed
-JUMP_HEIGHT = 7.2                  # Humanoid.JumpHeight (UseJumpPower=false, the new-place default)
+WALK_SPEED = 16.0                  # humanoid.WalkSpeed
+JUMP_HEIGHT = 7.2                  # humanoid.JumpHeight (UseJumpPower=false, the new-place default)
 JUMP_V = math.sqrt(2 * GRAVITY * JUMP_HEIGHT)   # 53.15 studs/s → 0.54s airtime, ~8.7 studs flat at walk speed
 HIP_HEIGHT = 2.0                   # R15 default; the root floats this high, so ledges under it are stepped up
-FOV_DEG = 70.0                     # Camera.FieldOfView (vertical)
+FOV_DEG = 70.0                     # camera.FieldOfView (vertical)
 ZOOM_DEFAULT, ZOOM_MIN, ZOOM_MAX = 12.5, 0.5, 128.0
-PROMPT_DIST = 10.0                 # ProximityPrompt.MaxActivationDistance
-CLICK_DIST = 32.0                  # ClickDetector.MaxActivationDistance
-RESPAWN_S = 5.0                    # Players.RespawnTime
+PROMPT_DIST = 10.0                 # proximityPrompt.MaxActivationDistance
+CLICK_DIST = 32.0                  # clickDetector.MaxActivationDistance
+RESPAWN_S = 5.0                    # players.RespawnTime
 
 # ── calibration knobs: not published by Roblox, set from feel. Change them if play feels off. ────────
 CHAR_RADIUS = 1.0                  # R15 root/torso collision half-width
@@ -53,11 +45,11 @@ def to_world(x, z, yaw):
     return c * x + s * z, -s * x + c * z
 
 
-def forward_xz(yaw: float) -> np.ndarray:
+def forward_xz(yaw):
     return np.array([math.sin(yaw), math.cos(yaw)])
 
 
-def right_xz(yaw: float) -> np.ndarray:
+def right_xz(yaw):
     return np.array([math.cos(yaw), -math.sin(yaw)])
 
 
@@ -73,16 +65,16 @@ class Motion:
     on_frac: float = 0.6         # vanish: fraction of the period it is solid
 
 
+# every part as flat numpy arrays, so collision and rendering are single vector ops
 class World:
-    """Every part as flat numpy arrays, so collision and rendering are single vector ops."""
 
     def __init__(self):
-        self._rows: list[dict] = []
-        self.motions: dict[int, Motion] = {}
+        self._rows = []
+        self.motions = {}
         self.t = 0.0
 
     def add(self, center, size, color, *, kill=False, neon=False, collide=True, yaw=0.0,
-            motion: Optional[Motion] = None, tag: Optional[str] = None, visible=True) -> int:
+            motion=None, tag=None, visible=True):
         i = len(self._rows)
         self._rows.append(dict(c=center, h=np.asarray(size, float) / 2, col=color, kill=kill, neon=neon,
                                collide=collide, yaw=yaw, tag=tag, visible=visible))
@@ -90,7 +82,7 @@ class World:
             self.motions[i] = motion
         return i
 
-    def build(self) -> None:
+    def build(self):
         r = self._rows
         self.c0 = np.array([x["c"] for x in r], float).reshape(-1, 3)
         self.h = np.array([x["h"] for x in r], float).reshape(-1, 3)
@@ -109,7 +101,7 @@ class World:
     def __len__(self):
         return len(self._rows)
 
-    def pose_at(self, i: int, t: float):
+    def pose_at(self, i, t):
         m = self.motions.get(i)
         c, yaw, solid = self.c0[i].copy(), self.yaw0[i], True
         if m is None:
@@ -124,8 +116,8 @@ class World:
             return c, yaw, solid, solid and u > m.on_frac - 0.25   # blinks for the last quarter-cycle, like fading obby tiles
         return c, yaw, solid, False
 
-    def update(self, t: float) -> None:
-        """Pose every moving part at time t in three vector ops, one per motion kind."""
+    # pose every moving part at time t in three vector ops, one per motion kind
+    def update(self, t):
         self.t = t
         if not self.motions:
             return
@@ -149,8 +141,8 @@ class World:
             self.visible[m["va"]] = self.visible0[m["va"]] & solid
             self.blink[m["va"]] = solid & (u > m["va_on"] - 0.25)
 
+    # nearest part hit by a ray, as (t, index) or (inf, -1). Same slab test the renderer uses
     def raycast(self, o, d, max_t=1e9, mask=None):
-        """Nearest part hit by a ray, as (t, index) or (inf, -1). Same slab test the renderer uses."""
         m = self.collide | self.visible if mask is None else mask
         rel = o[None, :] - self.c
         ox, oz = to_local(rel[:, 0], rel[:, 2], self.yaw)
@@ -179,7 +171,7 @@ class Humanoid:
     jump_cd: float = 0.0
     speed_mult: float = 1.0
     stun: float = 0.0                     # seconds left knocked silly (bonked, tackled): no walking or jumping
-    health: float = 100.0                 # Humanoid.Health / MaxHealth
+    health: float = 100.0                 # humanoid.Health / MaxHealth
     alive: bool = True
     dead_t: float = 0.0
     color: tuple = (0.95, 0.8, 0.2)      # the noob-yellow head/arms
@@ -187,9 +179,9 @@ class Humanoid:
     pants: tuple = (0.2, 0.6, 0.2)
 
 
-def humanoid_step(h: Humanoid, w: World, move: np.ndarray, jump: bool, dt: float = DT,
-                  face_to: Optional[float] = None) -> bool:
-    """One 1/60 s humanoid update. Returns True if it touched a kill part."""
+# one 1/60 s humanoid update. Returns True if it touched a kill part
+def humanoid_step(h, w, move, jump, dt=DT,
+                  face_to=None):
     if not h.alive:
         return False
 
@@ -238,7 +230,7 @@ def humanoid_step(h: Humanoid, w: World, move: np.ndarray, jump: bool, dt: float
     return touched_kill
 
 
-def _overlaps(h: Humanoid, w: World, margin: float):
+def _overlaps(h, w, margin):
     rel = h.pos - w.c
     lx, lz = to_local(rel[:, 0], rel[:, 2], w.yaw)
     qx, qz = np.clip(lx, -w.h[:, 0], w.h[:, 0]), np.clip(lz, -w.h[:, 2], w.h[:, 2])
@@ -249,9 +241,8 @@ def _overlaps(h: Humanoid, w: World, margin: float):
     return hit, lx, lz, ex, ez, dist, top, bot
 
 
-def _collide(h: Humanoid, w: World, prev_feet: float) -> bool:
-    """Roblox R15 rules: legs don't collide, so a part whose top is under HIP_HEIGHT above your feet is no wall;
-    it holds you up once your centre is over it (SUPPORT_R). Anything taller pushes you sideways or bumps your head."""
+# roblox R15 rules: legs don't collide, so a part whose top is under HIP_HEIGHT above your feet is no wall; it holds you up once your centre is over it (SUPPORT_R). Anything taller pushes you sideways or bumps your head
+def _collide(h, w, prev_feet):
     h.grounded, h.ground = False, -1
     skip = np.zeros(len(w.c), bool)
     for _ in range(8):
@@ -305,15 +296,15 @@ class Camera:
     zoom: float = ZOOM_DEFAULT
     fov: float = FOV_DEG
     shiftlock: bool = False
-    first_person: bool = False           # LockFirstPerson games (shooters): camera in the head, mouse turns it
+    first_person: bool = False           # lockFirstPerson games (shooters): camera in the head, mouse turns it
     pos: np.ndarray = field(default_factory=lambda: np.zeros(3))
     fwd: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 1.0]))
 
-    def turn(self, dyaw_deg: float, dpitch_deg: float) -> None:
+    def turn(self, dyaw_deg, dpitch_deg):
         self.yaw = (self.yaw + math.radians(dyaw_deg)) % (2 * math.pi)
         self.pitch = float(np.clip(self.pitch + math.radians(dpitch_deg), math.radians(-80), math.radians(80)))
 
-    def follow(self, h: Humanoid, w: World) -> None:
+    def follow(self, h, w):
         cp, sp = math.cos(self.pitch), math.sin(self.pitch)
         self.fwd = np.array([math.sin(self.yaw) * cp, -sp, math.cos(self.yaw) * cp])
         focus = h.pos + np.array([0, HEAD_Y, 0])
@@ -325,11 +316,11 @@ class Camera:
             focus = focus + np.array([r[0], 0, r[1]]) * SHIFTLOCK_OFFSET
         back = -self.fwd
         t, _ = w.raycast(focus, back, max_t=self.zoom, mask=w.collide & w.visible & ~w.neon)
-        dist = min(self.zoom, t - 0.5) if math.isfinite(t) else self.zoom   # Roblox's Popper pulls the camera in front of walls
+        dist = min(self.zoom, t - 0.5) if math.isfinite(t) else self.zoom   # roblox's Popper pulls the camera in front of walls
         self.pos = focus + back * max(0.5, dist)
 
-    def ray(self, u: float, v: float, aspect: float) -> np.ndarray:
-        """World direction through normalized screen point (u, v), (0,0) top-left."""
+    # world direction through normalized screen point (u, v), (0,0) top-left
+    def ray(self, u, v, aspect):
         th = math.tan(math.radians(self.fov) / 2)
         f = self.fwd
         r = np.array([math.cos(self.yaw), 0.0, -math.sin(self.yaw)])
@@ -337,8 +328,8 @@ class Camera:
         d = f + (2 * u - 1) * th * aspect * r - (2 * v - 1) * th * up
         return d / np.linalg.norm(d)
 
-    def project(self, p: np.ndarray, aspect: float):
-        """World point to normalized screen (u, v, depth), or None if behind the camera."""
+    # world point to normalized screen (u, v, depth), or None if behind the camera
+    def project(self, p, aspect):
         rel = p - self.pos
         f = self.fwd
         r = np.array([math.cos(self.yaw), 0.0, -math.sin(self.yaw)])
@@ -356,16 +347,16 @@ class Prompt:
     pos: np.ndarray
     action: str                     # "Purchase", "Steal"
     obj: str = ""                   # "Noobini Pizzanini  $25"
-    hold: float = 0.0               # HoldDuration seconds
+    hold: float = 0.0               # holdDuration seconds
     on_trigger: tuple = ()          # (env method name, *args): plain data, so an env pickles for GRPO rollouts
     enabled: tuple = ()             # same form; empty = always enabled
     progress: float = 0.0
 
 
 # ── base env ──────────────────────────────────────────────────────────────────
+# raw hands for one substep; the agent's Action spreads over SUBSTEPS of these
 @dataclass
 class Input:
-    """Raw hands for one substep; the agent's Action spreads over SUBSTEPS of these."""
     keys: frozenset = frozenset()
     dyaw: float = 0.0                # degrees this substep
     dpitch: float = 0.0
@@ -379,31 +370,30 @@ class Env:
     aspect = 16 / 9
     respawn_s = RESPAWN_S
     train_steps = 3000                # ticks per training episode
-    eval_kw: dict = {}                # fixed settings for train.eval
+    eval_kw = {}                # fixed settings for evals
 
-    def __init__(self, seed: int = 0, **kw):
+    def __init__(self, seed=0, **kw):
         self.seed = seed
         self.kw = kw
         self.reset(seed)
 
     # subclasses fill these in
-    def build(self) -> None: ...
-    def on_substep(self) -> None: ...
-    def dynamic_boxes(self) -> list: return []
-    def hud(self) -> list: return []
-    def on_ui(self, id_: str) -> None: ...
-    def on_world_click(self, part: int) -> None: ...
-    def respawn_point(self) -> np.ndarray: return np.zeros(3)
-    def expert(self) -> Action: return Action()
-    def say(self, plan: str) -> None:
-        """Experts call this on every decision path: what a player would say they're doing now, in terms of what's on
-        screen (never coordinates or hidden state). It's the PLAN line the policy learns to write before its inputs."""
+    def build(self): ...
+    def on_substep(self): ...
+    def dynamic_boxes(self): return []
+    def hud(self): return []
+    def on_ui(self, id_): ...
+    def on_world_click(self, part): ...
+    def respawn_point(self): return np.zeros(3)
+    def expert(self): return Action()
+    # experts call this on every decision path: what a player would say they're doing now, in terms of what's on screen (never coordinates or hidden state). It's the PLAN line the policy learns to write before its inputs
+    def say(self, plan):
         self.plan = plan
-    def potential(self) -> float: return 0.0   # dense progress score for reward shaping; games with sparse rewards override
-    def info(self) -> dict: return {}
-    def score(self) -> float: return 0.0      # the one eval number, higher is better
+    def potential(self): return 0.0   # dense progress score for reward shaping; games with sparse rewards override
+    def info(self): return {}
+    def score(self): return 0.0      # the one eval number, higher is better
 
-    def reset(self, seed: Optional[int] = None) -> None:
+    def reset(self, seed=None):
         self.seed = self.seed if seed is None else seed
         self.rng = np.random.default_rng(self.seed)
         self.t = 0.0
@@ -413,23 +403,23 @@ class Env:
         self.deaths = 0
         self.plan = ""                              # the expert's current subgoal in words (see say())
         self.world = World()
-        self.prompts: list[Prompt] = []
+        self.prompts = []
         self.cam = Camera()
         self.player = Humanoid(pos=np.zeros(3))
         self.cursor = (0.5, 0.5)
-        self.held: frozenset = frozenset()
+        self.held = frozenset()
         self.mouse_held = False
-        self.menu: Optional[str] = None             # Roblox's own Esc menu: None | "main" | "reset"
-        self.equipped: Optional[str] = None
-        self.toasts: list[tuple[float, str]] = []    # (expire time, text) Roblox-style notifications
+        self.menu = None             # roblox's own Esc menu: None | "main" | "reset"
+        self.equipped = None
+        self.toasts = []    # (expire time, text) Roblox-style notifications
         self.theme = self._theme()
         self.build()
         self.world.build()
         self.player.pos = self.respawn_point().astype(float)
         self.cam.follow(self.player, self.world)
 
-    def _theme(self) -> dict:
-        """Per-episode lighting and colour randomization, so the policy never overfits one sky."""
+    # per-episode lighting and colour randomization, so the policy never overfits one sky
+    def _theme(self):
         r = self.rng
         return dict(
             sky_top=np.clip(np.array([0.36, 0.62, 0.95]) + r.normal(0, 0.06, 3), 0, 1),
@@ -440,12 +430,12 @@ class Env:
             tint=np.clip(1 + r.normal(0, 0.04, 3), 0.85, 1.15),
         )
 
-    def toast(self, text: str, secs: float = 2.5) -> None:
+    def toast(self, text, secs=2.5):
         self.toasts.append((self.t + secs, text))
 
     # ── stepping ──
-    def step(self, a: Action) -> tuple[float, bool, dict]:
-        """One 100ms agent tick. The camera drag is spread across the tick like the real injector's."""
+    # one 100ms agent tick. The camera drag is spread across the tick like the real injector's
+    def step(self, a):
         self.reward = 0.0
         for k in range(SUBSTEPS):
             self.substep(Input(keys=a.keys, dyaw=a.look_x / SUBSTEPS, dpitch=a.look_y / SUBSTEPS,
@@ -453,7 +443,7 @@ class Env:
         self.steps += 1
         return self.reward, self.done, self.info()
 
-    def substep(self, inp: Input) -> None:
+    def substep(self, inp):
         pressed = inp.keys - self.held
         self.held = inp.keys
         self.cursor = inp.cursor
@@ -461,7 +451,7 @@ class Env:
         click = inp.click or "lmb" in pressed   # a fresh press of a held button is also a click
         if "esc" in pressed:
             self.menu = None if self.menu else "main"
-        if self.menu:   # Roblox's menu swallows game input, the world keeps running
+        if self.menu:   # roblox's menu swallows game input, the world keeps running
             if self.menu == "main" and "r" in pressed:
                 self.menu = "reset"
             if click:
@@ -499,25 +489,25 @@ class Env:
         self.on_substep()
         self.cam.follow(p, self.world)
 
-    def on_key(self, k: str) -> None: ...
-    def on_tool_click(self) -> bool: return False   # an equipped tool (bat, gun, rod) eats the click before UI/world clicks
+    def on_key(self, k): ...
+    def on_tool_click(self): return False   # an equipped tool (bat, gun, rod) eats the click before UI/world clicks
 
-    def die(self) -> None:
+    def die(self):
         self.player.alive = False
         self.player.dead_t = self.t
         self.deaths += 1
         self.on_death()
 
-    def on_death(self) -> None: ...
+    def on_death(self): ...
 
-    def respawn(self) -> None:
+    def respawn(self):
         p = self.player
         p.pos = self.respawn_point().astype(float)
         p.vel[:] = 0
         p.alive, p.grounded, p.health, p.stun = True, False, 100.0, 0.0
 
-    def damage(self, amount: float, why: str = "") -> None:
-        """Take health off the player; at 0 the character dies like a Roblox Humanoid does."""
+    # take health off the player; at 0 the character dies like a Roblox Humanoid does
+    def damage(self, amount, why=""):
         p = self.player
         if not p.alive or amount <= 0:
             return
@@ -527,12 +517,12 @@ class Env:
                 self.toast(why, 3)
             self.die()
 
-    def scene_theme(self) -> dict:
-        """The lighting this frame. Games with day/night or dark rooms override this."""
+    # the lighting this frame. Games with day/night or dark rooms override this
+    def scene_theme(self):
         return self.theme
 
-    def active_prompt(self) -> Optional[Prompt]:
-        """Roblox shows only the closest enabled prompt in range."""
+    # roblox shows only the closest enabled prompt in range
+    def active_prompt(self):
         if not self.player.alive:
             return None
         best, bd = None, PROMPT_DIST
@@ -542,7 +532,7 @@ class Env:
                 best, bd = pr, d
         return best
 
-    def _prompts(self, e_held: bool) -> None:
+    def _prompts(self, e_held):
         act = self.active_prompt()
         for pr in self.prompts:
             if pr is not act:
@@ -559,7 +549,7 @@ class Env:
             act.progress = -1.0
             getattr(self, act.on_trigger[0])(*act.on_trigger[1:])
 
-    def _click(self, cursor) -> None:
+    def _click(self, cursor):
         for el in reversed(self.ui_layers()):    # topmost UI wins, exactly like Roblox GUI input sinking
             if el.get("id") and _inside(cursor, el["rect"]):
                 if el["id"].startswith("rbx:"):
@@ -575,11 +565,11 @@ class Env:
             self.on_world_click(i)
 
     # ── Roblox's own menu (the logo button top-left, or Esc) ──
-    def ui_layers(self) -> list:
-        """Everything clickable, bottom to top: the Roblox menu button, the game's UI, then the menu if open."""
+    # everything clickable, bottom to top: the Roblox menu button, the game's UI, then the menu if open
+    def ui_layers(self):
         return [dict(kind="hit", id="rbx:menu", rect=MENU_BUTTON)] + self.hud() + self._menu_hud()
 
-    def _menu_click(self, id_: str) -> None:
+    def _menu_click(self, id_):
         if id_ == "menu":
             self.menu = None if self.menu else "main"
         elif id_ == "resume":
@@ -589,14 +579,14 @@ class Env:
         elif id_ == "reset_yes":
             self.menu = None
             if self.player.alive:
-                self.die()            # Roblox resets by killing the character; it respawns at the checkpoint
+                self.die()            # roblox resets by killing the character; it respawns at the checkpoint
         elif id_ == "reset_no":
             self.menu = "main"
         elif id_ == "leave":
             self.menu = None
             self.done = True
 
-    def _menu_hud(self) -> list:
+    def _menu_hud(self):
         if not self.menu:
             return []
         els = [dict(kind="panel", id="rbx:block", rect=(0, 0, 1, 1), color=(0.05, 0.05, 0.07), alpha=0.75)]
@@ -615,8 +605,8 @@ class Env:
                     dict(kind="button", id="rbx:reset_no", rect=(0.51, 0.53, 0.13, 0.08), text="Don't Reset", color=(0.35, 0.35, 0.4), size=16)]
         return els
 
-    def open_reset(self) -> Action:
-        """Expert helper: Esc → R → click Reset, like a stuck player does."""
+    # expert helper: Esc → R → click Reset, like a stuck player does
+    def open_reset(self):
         if self.menu is None:
             return Action(keys=frozenset({"esc"}), cursor=self.cursor)
         if self.menu == "main":
@@ -626,7 +616,7 @@ class Env:
         return Action(cursor=(x + w / 2, y + h / 2), click=on)
 
     # ── what the renderer needs ──
-    def scene(self, k_max: int = 128) -> dict:
+    def scene(self, k_max=128):
         w = self.world
         vis = np.flatnonzero(w.visible)
         c, h, yaw, col = w.c[vis], w.h[vis], w.yaw[vis], w.col[vis].copy()
@@ -653,15 +643,15 @@ class Env:
                     c=c[keep], h=h[keep], yaw=yaw[keep], col=col[keep] * self.theme["tint"], neon=neon[keep],
                     theme=self.scene_theme(), hud=self._hover(self.ui_layers()) + self._toast_hud() + ([] if self.menu else self._prompt_hud()))
 
-    def _hover(self, els: list) -> list:
-        """Mark the topmost clickable element under the cursor, which the HUD draws lit up."""
+    # mark the topmost clickable element under the cursor, which the HUD draws lit up
+    def _hover(self, els):
         for el in reversed(els):
             if el.get("id") and el["kind"] in ("button", "icon") and _inside(self.cursor, el["rect"]):
                 el["hover"] = True
                 break
         return els
 
-    def _prompt_hud(self) -> list:
+    def _prompt_hud(self):
         pr = self.active_prompt()
         if pr is None:
             return []
@@ -671,19 +661,19 @@ class Env:
         return [dict(kind="prompt", at=(uv[0], uv[1]), text=pr.action, sub=pr.obj,
                      progress=(max(pr.progress, 0) / pr.hold) if pr.hold > 0 else 0.0)]
 
-    def _toast_hud(self) -> list:
+    def _toast_hud(self):
         self.toasts = [x for x in self.toasts if x[0] > self.t]
         return [dict(kind="toast", rect=(0.35, 0.16 + 0.06 * i, 0.3, 0.05), text=txt) for i, (_, txt) in enumerate(self.toasts[-3:])]
 
-    def billboard(self, p, text, color=(1, 1, 1), size=1.0, max_dist=80) -> Optional[dict]:
+    def billboard(self, p, text, color=(1, 1, 1), size=1.0, max_dist=80):
         uv = self.cam.project(np.asarray(p, float), self.aspect)
         if uv is None or uv[2] > max_dist:
             return None
         return dict(kind="billboard", at=(uv[0], uv[1]), text=text, color=color, size=size * min(1.5, 14 / max(uv[2], 4)))
 
     # ── expert helpers shared by the games ──
-    def steer_to(self, target, keys=("w",), jump=False, stop_dist=1.5) -> Action:
-        """Turn the camera toward target and walk: what a human does with mouse + W."""
+    # turn the camera toward target and walk: what a human does with mouse + W
+    def steer_to(self, target, keys=("w",), jump=False, stop_dist=1.5):
         p = self.player.pos
         dx, dz = target[0] - p[0], target[2] - p[2]
         want = math.atan2(dx, dz)
@@ -695,16 +685,16 @@ class Env:
         pitch_err = math.degrees(math.radians(20) - self.cam.pitch)
         return Action(keys=frozenset(ks), look_x=look, look_y=float(np.clip(pitch_err, -10, 10)), cursor=self.cursor)
 
-    def click_at_world(self, p) -> Optional[tuple]:
+    def click_at_world(self, p):
         uv = self.cam.project(np.asarray(p, float), self.aspect)
         if uv is None or not (0.02 < uv[0] < 0.98 and 0.02 < uv[1] < 0.98):
             return None
         return (uv[0], uv[1])
 
 
+# A walled building you enter through one doorway
 @dataclass
 class Room:
-    """A walled building you enter through one doorway."""
     cx: float
     cz: float
     hx: float
@@ -712,12 +702,12 @@ class Room:
     door_in: np.ndarray
     door_out: np.ndarray
 
-    def inside(self, p) -> bool:
+    def inside(self, p):
         return abs(p[0] - self.cx) < self.hx and abs(p[2] - self.cz) < self.hz
 
 
-def route(p, goal, rooms: list) -> np.ndarray:
-    """Next point toward goal, going through doorways instead of walls."""
+# next point toward goal, going through doorways instead of walls
+def route(p, goal, rooms):
     for rm in rooms:
         if rm.inside(p) != rm.inside(goal):
             a, b = (rm.door_in, rm.door_out) if rm.inside(p) else (rm.door_out, rm.door_in)
@@ -728,14 +718,14 @@ def route(p, goal, rooms: list) -> np.ndarray:
     return np.asarray(goal, float)
 
 
-def npc_walk(h: Humanoid, w: World, goal, stop: float = 0.8, jump: bool = False) -> bool:
-    """Walk an NPC straight at goal for one substep. Returns True if it touched a kill part."""
+# walk an NPC straight at goal for one substep. Returns True if it touched a kill part
+def npc_walk(h, w, goal, stop=0.8, jump=False):
     d = (np.asarray(goal, float) - h.pos)[[0, 2]]
     return humanoid_step(h, w, d if np.linalg.norm(d) > stop else np.zeros(2), jump)
 
 
-def ray_humanoids(o, d, hs: list, max_t: float = 1e9):
-    """First humanoid a ray hits: (index, distance, headshot) or None. Body is the torso+legs box, head on top."""
+# first humanoid a ray hits: (index, distance, headshot) or None. Body is the torso+legs box, head on top
+def ray_humanoids(o, d, hs, max_t=1e9):
     best = None
     for i, h in enumerate(hs):
         if not h.alive:
@@ -754,15 +744,15 @@ def ray_humanoids(o, d, hs: list, max_t: float = 1e9):
     return best
 
 
-def health_hud(health: float) -> list:
-    """Roblox's health bar: green to red, top right under the player list."""
+# roblox's health bar: green to red, top right under the player list
+def health_hud(health):
     f = max(0.0, min(1.0, health / 100))
     col = (min(1, 2 * (1 - f)), min(1, 2 * f), 0.15)
     return [dict(kind="bar", rect=(0.80, 0.30, 0.18, 0.022), frac=f, color=col)]
 
 
-def hotbar_hud(names: list, equipped: Optional[int]) -> list:
-    """The default Roblox backpack hotbar: numbered slots along the bottom; click one or press its number."""
+# the default Roblox backpack hotbar: numbered slots along the bottom; click one or press its number
+def hotbar_hud(names, equipped):
     n = len(names)
     w, gap = 0.07, 0.008
     x0 = 0.5 - (n * w + (n - 1) * gap) / 2
@@ -774,8 +764,8 @@ def hotbar_hud(names: list, equipped: Optional[int]) -> list:
     return out
 
 
-def night_theme(theme: dict, k: float, lights=()) -> dict:
-    """Blend a day theme toward night by k in [0,1]: dark blue sky, weak sun, low ambient."""
+# blend a day theme toward night by k in [0,1]: dark blue sky, weak sun, low ambient
+def night_theme(theme, k, lights=()):
     t = dict(theme)
     t["sky_top"] = theme["sky_top"] * (1 - k) + np.array([0.02, 0.03, 0.08]) * k
     t["sky_hor"] = theme["sky_hor"] * (1 - k) + np.array([0.05, 0.06, 0.12]) * k
@@ -786,8 +776,8 @@ def night_theme(theme: dict, k: float, lights=()) -> dict:
     return t
 
 
-def avatar_boxes(h: Humanoid, dead_for: float = 0.0) -> list:
-    """A blocky R15-ish avatar: legs, torso, arms, head. Each entry is (center, size, yaw, colour)."""
+# A blocky R15-ish avatar: legs, torso, arms, head. Each entry is (center, size, yaw, colour)
+def avatar_boxes(h, dead_for=0.0):
     f = h.face
     fx, fz = math.sin(f), math.cos(f)
     rx, rz = math.cos(f), -math.sin(f)
@@ -809,7 +799,7 @@ def avatar_boxes(h: Humanoid, dead_for: float = 0.0) -> list:
 MENU_BUTTON = (12 / 1280, 12 / 720, 44 / 1280, 44 / 720)   # the Roblox logo button hud._topbar draws top-left
 
 
-def _inside(p, rect) -> bool:
+def _inside(p, rect):
     x, y, w, h = rect
     return x <= p[0] <= x + w and y <= p[1] <= y + h
 

@@ -1,20 +1,11 @@
-"""Steal a Brainrot: buy brainrots off the red carpet, collect their cash, lock your base, steal from rivals.
-
-Mechanics follow the real game: $100 start, first lock 30s then 60s, laser door blocks everyone but the
-owner, buying is an E prompt on a walking brainrot, stealing is a held E prompt that slows you while you
-carry it home, and the owner (or anyone with a bat) can knock it out of your hands.
-"""
-
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Humanoid, Prompt, Room, avatar_boxes, humanoid_step, route
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Humanoid, Prompt, Room, avatar_boxes, humanoid_step, route
 
 # (name, rarity, price, $/s, spawn weight)
 KINDS = [
@@ -68,10 +59,10 @@ class Npc:
 class StealABrainrot(Env):
     name = "brainrot"
 
-    def score(self) -> float:
+    def score(self):
         return math.log10(max(1.0, self._networth()))   # log10 net worth; you start at 2.0
 
-    def build(self) -> None:
+    def build(self):
         r, w = self.rng, self.world
         self.max_steps = int(self.kw.get("max_steps", 6000))
         n_npc = int(self.kw.get("npcs", r.integers(3, 7)))
@@ -96,7 +87,7 @@ class StealABrainrot(Env):
         self.me = 0
         order = [p for p in range(1, 8)]
         r.shuffle(order)
-        self.npcs: list[Npc] = []
+        self.npcs = []
         for k in range(n_npc):
             pl = order[k]
             hh = Humanoid(pos=self.plots[pl]["home"].copy(), shirt=tuple(r.uniform(0.1, 0.9, 3)), pants=tuple(r.uniform(0.1, 0.6, 3)))
@@ -109,10 +100,10 @@ class StealABrainrot(Env):
             self.plots[pl]["lock_until"] = FIRST_LOCK if pl in self.owner_of else 0.0
 
         self.cash = 100.0
-        self.brainrots: dict[int, Rot] = {}
+        self.brainrots = {}
         self._next_id = 0
         self._next_spawn = 0.0
-        self.br_prompts: dict[int, Prompt] = {}
+        self.br_prompts = {}
         self.carrying = -1
         self.bat_cd = 0.0
         self.swing_t = -9.0
@@ -161,30 +152,30 @@ class StealABrainrot(Env):
         return self.plots[0]["home"] + [0, 0.1, 0]
 
     # ── brainrot bookkeeping ──
-    def _new_br(self, kind, pos) -> Rot:
+    def _new_br(self, kind, pos):
         b = Rot(id=self._next_id, kind=kind, pos=np.asarray(pos, float))
         self.brainrots[b.id] = b
         self._next_id += 1
         return b
 
-    def _free_slot(self, plot) -> int:
+    def _free_slot(self, plot):
         used = {b.slot for b in self.brainrots.values() if b.owner == plot and b.state in ("slot", "walking")}
         for s in range(SLOTS):
             if s not in used:
                 return s
         return -1
 
-    def _inside(self, plot, p) -> bool:
+    def _inside(self, plot, p):
         return self.rooms[plot].inside(p)
 
-    def _locked(self, plot) -> bool:
+    def _locked(self, plot):
         return self.t < self.plots[plot]["lock_until"]
 
-    def _route(self, h: Humanoid, goal) -> np.ndarray:
+    def _route(self, h, goal):
         return route(h.pos, goal, self.rooms)
 
-    def _buy(self, bid: int, buyer: int) -> bool:
-        """buyer is a plot index."""
+    # buyer is a plot index
+    def _buy(self, bid, buyer):
         b = self.brainrots.get(bid)
         if b is None or b.state != "conveyor":
             return False
@@ -206,8 +197,8 @@ class StealABrainrot(Env):
         self.br_prompts.pop(bid, None)
         return True
 
-    def _drop(self, b: Rot) -> None:
-        """Knocked out of a thief's hands: it walks straight back to its owner's podium."""
+    # knocked out of a thief's hands: it walks straight back to its owner's podium
+    def _drop(self, b):
         if b.carrier == 0:
             self.carrying = -1
             self.player.speed_mult = 1.0
@@ -219,10 +210,10 @@ class StealABrainrot(Env):
         b.state = "walking"
         b.path = [P["door_out"] + [0, 0.2, 0], P["door_in"] + [0, 0.2, 0], P["slot_pos"][b.slot]] if not self._inside(b.owner, b.pos) else [P["slot_pos"][b.slot]]
 
-    def _steal_id(self, bid: int, thief: int) -> None:
+    def _steal_id(self, bid, thief):
         self._steal(self.brainrots[bid], thief)
 
-    def _steal(self, b: Rot, thief: int) -> None:
+    def _steal(self, b, thief):
         b.state, b.carrier = "carried", thief
         if thief == 0:
             self.carrying = b.id
@@ -233,8 +224,8 @@ class StealABrainrot(Env):
         if b.owner == 0:
             self.toast("Someone is stealing your brainrot!", 3)
 
-    def _land(self, b: Rot, new_owner: int) -> None:
-        """A carried brainrot reaching its thief's base becomes theirs."""
+    # A carried brainrot reaching its thief's base becomes theirs
+    def _land(self, b, new_owner):
         slot = self._free_slot(new_owner)
         if slot < 0:
             self._drop(b)
@@ -251,26 +242,26 @@ class StealABrainrot(Env):
         b.state = "slot"
         b.pos = self.plots[new_owner]["slot_pos"][slot].copy()
 
-    def _networth(self) -> float:
+    def _networth(self):
         owned = sum(KINDS[b.kind][2] for b in self.brainrots.values() if b.owner == 0 and b.state in ("slot", "walking"))
         return self.cash + owned
 
-    def income(self, plot=0) -> float:
+    def income(self, plot=0):
         return sum(KINDS[b.kind][3] for b in self.brainrots.values() if b.owner == plot and b.state == "slot")
 
     # ── per-substep world ──
-    def _set_doors(self, who_plot: int) -> None:
+    def _set_doors(self, who_plot):
         w = self.world
         for k, P in enumerate(self.plots):
             on = self._locked(k)
             w.visible[P["beams"]] = on
             w.collide[P["door"]] = on and k != who_plot
 
-    def on_key(self, k: str) -> None:
+    def on_key(self, k):
         if k == "1":
             self.equipped = None if self.equipped == "bat" else "bat"
 
-    def on_substep(self) -> None:
+    def on_substep(self):
         r = self.rng
         # conveyor spawns
         if self.t >= self._next_spawn:
@@ -335,7 +326,7 @@ class StealABrainrot(Env):
         if self.steps >= self.max_steps:
             self.done = True
 
-    def _steal_prompts(self) -> None:
+    def _steal_prompts(self):
         for b in self.brainrots.values():
             ok = b.state == "slot" and b.owner != 0
             if ok and b.id not in self.br_prompts:
@@ -344,21 +335,21 @@ class StealABrainrot(Env):
             elif not ok and b.id in self.br_prompts and b.state != "conveyor":
                 del self.br_prompts[b.id]
 
-    def _can_steal(self, bid) -> bool:
+    def _can_steal(self, bid):
         b = self.brainrots.get(bid)
         return b is not None and b.state == "slot" and self.carrying < 0 and self._inside(b.owner, self.player.pos)
 
-    def on_ui(self, id_: str) -> None: ...
+    def on_ui(self, id_): ...
 
-    def on_world_click(self, part: int) -> None: ...
+    def on_world_click(self, part): ...
 
-    def on_tool_click(self) -> bool:
+    def on_tool_click(self):
         if self.equipped != "bat":
             return False
         self._swing(self.player, 0)
         return True
 
-    def _swing(self, h: Humanoid, who: int) -> None:
+    def _swing(self, h, who):
         cd = self.bat_cd if who == 0 else self.npcs[who - 1].bat_cd
         if cd > 0:
             return
@@ -391,7 +382,7 @@ class StealABrainrot(Env):
                     self.toast("You got bonked!", 1.5)
 
     # ── rivals ──
-    def _npc_step(self, k: int, n: Npc) -> None:
+    def _npc_step(self, k, n):
         h, me = n.h, k + 1
         n.bat_cd = max(0.0, n.bat_cd - DT)
         n.timer -= DT
@@ -465,7 +456,7 @@ class StealABrainrot(Env):
         if h.pos[1] < -20:
             h.pos, h.vel = P["home"].copy(), np.zeros(3)
 
-    def _npc_choose(self, k: int, n: Npc) -> None:
+    def _npc_choose(self, k, n):
         r = self.rng
         n.timer = float(r.uniform(4, 10))
         mine = [b for b in self.brainrots.values() if b.owner == n.plot and b.state == "slot"]
@@ -489,7 +480,7 @@ class StealABrainrot(Env):
         n.state = "wander"
 
     # ── rendering ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         for n in self.npcs:
             out += avatar_boxes(n.h)
@@ -503,7 +494,7 @@ class StealABrainrot(Env):
             out.append(((h.pos[0] + ox * 2.6, h.pos[1] + 3.0, h.pos[2] + oz * 2.6), (0.5, 0.5, 3.5), ang, (0.55, 0.35, 0.15)))
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         rows = [["You", "$" + _fmt(self.cash)]] + [[n.name[:10], "$" + _fmt(n.cash)] for n in self.npcs]
         els = [dict(kind="leaderboard", cols=["Cash"], rows=rows),
                dict(kind="text", rect=(0.02, 0.9, 0.3, 0.06), text=f"${_fmt(self.cash)}   +${_fmt(self.income())}/s", size=28, color=(0.4, 1.0, 0.4)),
@@ -524,18 +515,18 @@ class StealABrainrot(Env):
                 els.append(bb)
         return els
 
-    def potential(self) -> float:
-        """Closer to wherever the expert would go next (a brainrot to buy, a pad to collect, home) is progress."""
+    # closer to wherever the expert would go next (a brainrot to buy, a pad to collect, home) is progress
+    def potential(self):
         self.goal = None
         self.expert()
         return 0.0 if self.goal is None else -0.01 * float(np.linalg.norm((self.goal - self.player.pos)[[0, 2]]))
 
-    def info(self) -> dict:
+    def info(self):
         return dict(cash=self.cash, income=self.income(), owned=sum(1 for b in self.brainrots.values() if b.owner == 0),
                     networth=self._networth())
 
     # ── expert ──
-    def expert(self) -> Action:
+    def expert(self):
         p, P0 = self.player, self.plots[0]
         cur = self.cursor
         if self.carrying >= 0:
@@ -591,13 +582,13 @@ class StealABrainrot(Env):
         self.say("nothing worth buying, wait at my base")
         return self._go(P0["home"], stop=4.0)
 
-    def _go(self, goal, stop=1.5) -> Action:
+    def _go(self, goal, stop=1.5):
         self.goal = np.asarray(goal, float)
         nxt = self._route(self.player, np.asarray(goal, float))
         return self.steer_to(nxt, stop_dist=stop if np.allclose(nxt, goal) else 1.0)
 
 
-def _br_boxes(b: Rot) -> list:
+def _br_boxes(b):
     k = b.kind
     s = 1.0 + 0.06 * k
     c = BODY_COL[k]
@@ -609,13 +600,12 @@ def _br_boxes(b: Rot) -> list:
             ((x + 0.6 * s, y + 0.25 * s, z), (0.6 * s, 0.5 * s + 0.5, 0.6 * s), 0.0, c)]
 
 
-def _fmt(v: float) -> str:
+def _fmt(v):
     v = float(v)
     for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
         if abs(v) >= div:
             return f"{v / div:.1f}{unit}"
     return f"{v:.0f}"
-
 
 
 if __name__ == "__main__":
@@ -629,7 +619,7 @@ if __name__ == "__main__":
     print(f"expert: {info}, return {R:.2f}, {(time.time() - t0) / env.steps * 1000:.1f} ms/tick")
     env = StealABrainrot(seed=0, max_steps=3000)
     rng = np.random.default_rng(0)
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     while not env.done:
         env.step(Action(keys=frozenset(k for k in KEYS if rng.random() < 0.1), look_x=float(rng.normal(0, 10))))
     print(f"random: {env.info()}")

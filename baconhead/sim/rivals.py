@@ -1,19 +1,9 @@
-"""Rivals: 1v1 first-person duels. First to 5 rounds wins the match; a new match starts right after.
-
-You: first-person assault rifle. Hold left mouse for automatic fire (10 rounds/s), 30-round magazine, R to
-reload (2 s), 20 body / 40 head, walls stop bullets, spread grows when you move or jump. The bot strafes
-between cover, peeks, and shoots back after a reaction delay with accuracy that falls off with distance
-and with your movement, so standing still in the open loses.
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import LOOK_X, LOOK_Y, Action, _nearest
-from sim.core import DT, HEAD_Y, Env, Humanoid, avatar_boxes, hotbar_hud, humanoid_step, ray_humanoids
+from baconhead.core.actions import LOOK_X, LOOK_Y, Action, _nearest
+from baconhead.sim.core import DT, HEAD_Y, Env, Humanoid, avatar_boxes, hotbar_hud, humanoid_step, ray_humanoids
 
 MAG, RPS, RELOAD_S = 30, 10.0, 2.0
 BODY_DMG, HEAD_DMG = 20.0, 40.0
@@ -22,7 +12,7 @@ ROUNDS_TO_WIN, ROUND_GAP = 5, 2.0
 SPAWN_X = 44.0
 
 
-def _dir(yaw: float, pitch: float) -> np.ndarray:
+def _dir(yaw, pitch):
     cp = math.cos(pitch)
     return np.array([math.sin(yaw) * cp, -math.sin(pitch), math.cos(yaw) * cp])
 
@@ -31,7 +21,7 @@ class Rivals(Env):
     name = "rivals"
     train_steps = 3000
 
-    def build(self) -> None:
+    def build(self):
         r, w = self.rng, self.world
         self.max_steps = int(self.kw.get("max_steps", self.train_steps))
         self.respawn_s = 1e9   # rounds reset both players themselves
@@ -73,11 +63,11 @@ class Rivals(Env):
     def respawn_point(self):
         return np.array([-SPAWN_X, 0.0, 0.0])
 
-    def score(self) -> float:
+    def score(self):
         return float(self.wins - self.losses)
 
     # ── rounds ──
-    def _new_round(self) -> None:
+    def _new_round(self):
         p, b = self.player, self.bot
         p.pos, p.vel = self.respawn_point(), np.zeros(3)
         p.alive, p.health, p.stun, p.grounded = True, 100.0, 0.0, False
@@ -98,7 +88,7 @@ class Rivals(Env):
         self._prev_r = False
         self._exp_stuck, self._exp_last = 0, p.pos.copy()
 
-    def _end_round(self, you_won: bool) -> None:
+    def _end_round(self, you_won):
         if self.round_over_t is not None:
             return
         self.round_over_t = self.t + ROUND_GAP
@@ -119,20 +109,20 @@ class Rivals(Env):
             self.banner = "VICTORY" if won else "DEFEAT"
             self.round_you = self.round_bot = 0
 
-    def on_death(self) -> None:
+    def on_death(self):
         self._end_round(False)
 
     # ── shooting ──
-    def _los(self, a: np.ndarray, b: np.ndarray) -> bool:
+    def _los(self, a, b):
         d = b - a
         dist = float(np.linalg.norm(d))
         t, _ = self.world.raycast(a, d / max(dist, 1e-6), max_t=dist, mask=self.world.collide & self.world.visible)
         return not math.isfinite(t)
 
-    def _eye(self) -> np.ndarray:
+    def _eye(self):
         return self.player.pos + np.array([0.0, HEAD_Y, 0.0])
 
-    def _shoot(self) -> None:
+    def _shoot(self):
         if self.fire_cd > 0 or self.ammo <= 0 or self.menu or self.round_over_t is not None:
             return
         p = self.player
@@ -157,12 +147,12 @@ class Rivals(Env):
             b.alive, b.dead_t = False, self.t
             self._end_round(True)
 
-    def on_tool_click(self) -> bool:
+    def on_tool_click(self):
         self._shoot()
         return True
 
     # ── per substep ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         if self.round_over_t is not None and self.t >= self.round_over_t:
             self._new_round()
         self.fire_cd = max(0.0, self.fire_cd - DT)
@@ -180,7 +170,7 @@ class Rivals(Env):
         if self.steps >= self.max_steps:
             self.done = True
 
-    def _bot_step(self) -> None:
+    def _bot_step(self):
         b, p, r = self.bot, self.player, self.rng
         head = b.pos + np.array([0.0, HEAD_Y, 0.0])
         target = p.pos + np.array([0.0, 3.0, 0.0])
@@ -228,7 +218,7 @@ class Rivals(Env):
                 self.damage(dmg, "Eliminated")
 
     # ── rendering ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         b = self.bot
         if b.alive or self.t - b.dead_t < 0.4:
@@ -247,7 +237,7 @@ class Rivals(Env):
                 out.append((tuple(m), (0.25, 0.25, 0.25), c.yaw, (1.0, 0.85, 0.3), 1))
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         p, b = self.player, self.bot
         els = [dict(kind="panel", rect=(0.38, 0.015, 0.24, 0.1), color=(0.08, 0.08, 0.1), alpha=0.55),
                dict(kind="text", rect=(0.38, 0.02, 0.24, 0.05), text=f"You {self.round_you}  -  {self.round_bot} Enemy", size=26, align="center"),
@@ -277,12 +267,12 @@ class Rivals(Env):
                             color=(0.4, 1, 0.5) if self.banner in ("Round won!", "VICTORY") else (1, 0.35, 0.35)))
         return els
 
-    def info(self) -> dict:
+    def info(self):
         return dict(rounds_won=self.wins, rounds_lost=self.losses, matches_won=self.matches_won, matches_lost=self.matches_lost,
                     health=self.player.health, enemy_health=self.bot.health, ammo=max(self.ammo, 0))
 
     # ── shaping and expert ──
-    def potential(self) -> float:
+    def potential(self):
         p, b = self.player, self.bot
         if not (p.alive and b.alive) or self.round_over_t is not None:
             return 0.0
@@ -294,7 +284,7 @@ class Rivals(Env):
             phi += 0.2
         return phi
 
-    def expert(self) -> Action:
+    def expert(self):
         p, b = self.player, self.bot
         if self.menu:
             self.say("menu is open, close it")
@@ -356,7 +346,12 @@ if __name__ == "__main__":
     import os
     import pickle
     import time
-    from train.eval import _random_action
+    from baconhead.core.actions import HEADS
+
+    def _random_action(rng):
+        ids = {k: (rng.random(n) < 0.15).astype(np.float32) if k == "keys" else int(rng.integers(n)) for k, n in HEADS.items()}
+        ids["click"] = int(rng.random() < 0.05)
+        return Action.from_ids(ids)
 
     ticks = 1800   # 3 minutes
     for seed in (0, 1, 2):
@@ -388,7 +383,7 @@ if __name__ == "__main__":
 
     if os.environ.get("RENDER"):
         from PIL import Image
-        from sim.render import render
+        from baconhead.sim.render import render
         os.makedirs("/tmp/bh/rivals", exist_ok=True)
         env = Rivals(seed=0, max_steps=10 ** 9)
         shots = {}

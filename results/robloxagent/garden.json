@@ -1,0 +1,17 @@
+{
+ "game": "garden",
+ "seed": 999000,
+ "kw": {},
+ "ticks": 600,
+ "goal": "grow carrots and sell them for more than you started with (20)",
+ "reached_at": 272,
+ "score": 1.5563025007672873,
+ "deaths": 0,
+ "info": {
+  "sheckles": 36,
+  "networth": 36,
+  "plants": 0,
+  "fruit": 0
+ },
+ "parse_fail": 0.006666666666666667
+}

@@ -1,21 +1,10 @@
-"""Murder Mystery 2: a short lobby, then rounds in a mansion with 8 players and secret roles.
-
-Real-game rules kept: one Murderer (knife, kills on contact + click), one Sheriff (gun, click to shoot at the
-cursor), everyone else Innocent. Shooting the Murderer ends the round; a Sheriff who shoots an Innocent dies
-too. A dead Sheriff drops the gun, which any Innocent can pick up by touching it (they become the Hero).
-Coins spawn around the map and are picked up by touch. Innocents win if the Murderer dies or time runs out;
-the Murderer wins by killing everyone else. Your role is shown on a card at the start of each round.
-"""
-
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, SUBSTEPS, Env, Humanoid, avatar_boxes, hotbar_hud, npc_walk, ray_humanoids
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, SUBSTEPS, Env, Humanoid, avatar_boxes, hotbar_hud, npc_walk, ray_humanoids
 
 LOBBY_S, ROUND_S, END_S, CARD_S = 6.0, 150.0, 4.0, 3.0
 KNIFE_RANGE, KNIFE_CD = 3.8, 1.0
@@ -48,8 +37,8 @@ def _center(i, j):
     return np.array([(XS[i] + XS[i + 1]) / 2, 0.0, (ZS[j] + ZS[j + 1]) / 2])
 
 
-def nav(p, goal) -> np.ndarray:
-    """Next point toward goal through the mansion's doorways (x first, then z)."""
+# next point toward goal through the mansion's doorways (x first, then z)
+def nav(p, goal):
     (i, j), (gi, gj) = _cell(p), _cell(goal)
     if (i, j) == (gi, gj):
         return np.asarray(goal, float)
@@ -66,7 +55,7 @@ class MurderMystery2(Env):
     train_steps = 3000
     eval_kw = {}
 
-    def build(self) -> None:
+    def build(self):
         w, r = self.world, self.rng
         self.max_steps = int(self.kw.get("max_steps", self.train_steps))
         self.respawn_s = 1e9                          # dead players spectate until the next round
@@ -106,10 +95,10 @@ class MurderMystery2(Env):
                                     shirt=tuple(r.uniform(0.1, 0.9, 3)), pants=tuple(r.uniform(0.1, 0.5, 3))), name=n)
                      for n in NAMES]
         self.role, self.coins, self.gun_cd, self.knife_cd = "lobby", 0, 0.0, 0.0
-        self.coin_pos: list[np.ndarray] = []
+        self.coin_pos = []
         self.gun_drop = None
         self.phase, self.phase_t = "lobby", 0.0
-        self.rounds: list[float] = []
+        self.rounds = []
         self.result = ""
         self.goal = None
         self.cam.pitch = math.radians(20)
@@ -117,7 +106,7 @@ class MurderMystery2(Env):
     def respawn_point(self):
         return self.lobby.copy() if getattr(self, "phase", "lobby") == "lobby" else self._floor_point()
 
-    def _floor_point(self) -> np.ndarray:
+    def _floor_point(self):
         r = self.rng
         for _ in range(50):
             i, j = int(r.integers(3)), int(r.integers(2))
@@ -137,7 +126,7 @@ class MurderMystery2(Env):
                 return idx, h, armed
         return None
 
-    def _los(self, a, b) -> bool:
+    def _los(self, a, b):
         o, e = a.pos + [0, 4.5, 0], b.pos + [0, 3.0, 0]
         d = e - o
         dist = float(np.linalg.norm(d))
@@ -162,7 +151,7 @@ class MurderMystery2(Env):
             b.goal = b.h.pos.copy()
         self.coin_pos, self.gun_drop, self._next_coin = [], None, 0.0
 
-    def _end_round(self, innocents_win: bool):
+    def _end_round(self, innocents_win):
         if self.phase != "round":
             return
         me_innocent = self.role != "murderer"
@@ -177,7 +166,7 @@ class MurderMystery2(Env):
         self.toast(self.result, END_S)
         self.phase, self.phase_t = "end", 0.0
 
-    def _kill(self, idx: int, by_sheriff_mistake=False):
+    def _kill(self, idx, by_sheriff_mistake=False):
         h = self.player if idx == 0 else self.bots[idx - 1].h
         if not h.alive:
             return
@@ -198,8 +187,8 @@ class MurderMystery2(Env):
         elif not any(hh.alive for i, hh, rr, _ in self.chars() if rr != "murderer"):
             self._end_round(False)
 
-    def _shoot(self, shooter: int, o, d):
-        """A gunshot from o along d: first character hit (if no wall is in front of it)."""
+    # A gunshot from o along d: first character hit (if no wall is in front of it)
+    def _shoot(self, shooter, o, d):
         others = [(i, h) for i, h, _, _ in self.chars() if i != shooter]
         hit = ray_humanoids(o, d, [h for _, h in others], max_t=200)
         if hit is None:
@@ -220,18 +209,18 @@ class MurderMystery2(Env):
             self._kill(shooter)
 
     # ── your inputs ──
-    def on_key(self, k: str) -> None:
+    def on_key(self, k):
         if k == "1":
             self.on_ui("slot:0")
 
-    def on_ui(self, id_: str) -> None:
+    def on_ui(self, id_):
         if id_ == "slot:0" and self._item():
             self.equipped = None if self.equipped else self._item()
 
     def _item(self):
         return {"murderer": "knife", "sheriff": "gun", "hero": "gun"}.get(self.role) if self.phase == "round" else None
 
-    def on_tool_click(self) -> bool:
+    def on_tool_click(self):
         if not self.equipped or any(el.get("id") and _over(self.cursor, el["rect"]) for el in self.hud()):
             return False
         if self.equipped == "gun" and self.gun_cd <= 0:
@@ -251,7 +240,7 @@ class MurderMystery2(Env):
         return True
 
     # ── world ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         self.phase_t += DT
         self.gun_cd = max(0.0, self.gun_cd - DT)
         self.knife_cd = max(0.0, self.knife_cd - DT)
@@ -315,7 +304,7 @@ class MurderMystery2(Env):
         if self.phase == "round" and self.phase_t >= ROUND_S:
             self._end_round(True)
 
-    def _bot_think(self, idx: int, b: Bot, m):
+    def _bot_think(self, idx, b, m):
         r = self.rng
         h = b.h
         if b.role == "murderer":
@@ -353,8 +342,8 @@ class MurderMystery2(Env):
     def _char(self, idx):
         return self.player if idx == 0 else self.bots[idx - 1].h
 
-    def _isolated(self, me: int) -> int:
-        """The living non-murderer with the fewest people near them."""
+    # the living non-murderer with the fewest people near them
+    def _isolated(self, me):
         best, key = -1, None
         alive = [(i, h) for i, h, rr, _ in self.chars() if h.alive and i != me]
         for i, h in alive:
@@ -369,8 +358,8 @@ class MurderMystery2(Env):
             return _center(*_cell(p))          # no RNG here: the expert calls this, and asking it must not change the game
         return min(self.coin_pos, key=lambda c: np.linalg.norm((c - p)[[0, 2]])).copy()
 
+    # A coin near other players, or the middle of the nearest group: the murderer hunts whoever is alone
     def _crowd_goal(self, p):
-        """A coin near other players, or the middle of the nearest group: the murderer hunts whoever is alone."""
         others = [b.h.pos for b in self.bots if b.h.alive]
         if not others:
             return self._nearest_coin(p)
@@ -380,8 +369,8 @@ class MurderMystery2(Env):
         close = sorted(others, key=lambda o: np.linalg.norm((o - p)[[0, 2]]))[:3]
         return np.mean(close, axis=0)
 
+    # anyone within 14 studs sprinting straight at you: the tell real players watch for
     def _charging(self):
-        """Anyone within 14 studs sprinting straight at you: the tell real players watch for."""
         p = self.player.pos
         for b in self.bots:
             d = (p - b.h.pos)[[0, 2]]
@@ -391,7 +380,7 @@ class MurderMystery2(Env):
                 return b.h
         return None
 
-    def _gun_sees(self, h) -> bool:
+    def _gun_sees(self, h):
         return any(b.h.alive and b.role in ("sheriff", "hero") and np.linalg.norm((b.h.pos - h.pos)[[0, 2]]) < 50 and self._los(b.h, h)
                    for b in self.bots)
 
@@ -400,7 +389,7 @@ class MurderMystery2(Env):
         return max(cs, key=lambda c: np.linalg.norm((c - threat)[[0, 2]])).copy()
 
     # ── rendering ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         for b in self.bots:
             if b.h.alive or self.t - b.h.dead_t < 0.4:
@@ -416,7 +405,7 @@ class MurderMystery2(Env):
             out.append((tuple(self.gun_drop + [0, 0.4, 0]), (0.8, 1.2, 2.6), spin, (1.0, 0.85, 0.2), 1))
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         els = []
         rows = [["You" + ("" if self.player.alive else " (dead)"), self.coins]] + \
                [[b.name[:10] + ("" if b.h.alive or self.phase != "round" else " (dead)"), b.coins] for b in self.bots]
@@ -446,14 +435,14 @@ class MurderMystery2(Env):
                 els.append(bb)
         return els
 
-    def info(self) -> dict:
+    def info(self):
         return dict(role=self.role, phase=self.phase, coins=self.coins, rounds=len(self.rounds), wins=int(sum(self.rounds)),
                     alive=sum(h.alive for _, h, _, _ in self.chars()), deaths=self.deaths)
 
-    def score(self) -> float:
+    def score(self):
         return (float(np.mean(self.rounds)) if self.rounds else 0.0) + 0.01 * self.coins
 
-    def potential(self) -> float:
+    def potential(self):
         self.goal = None
         self.expert()
         if self.goal is None or not self.player.alive:
@@ -461,7 +450,7 @@ class MurderMystery2(Env):
         return -0.01 * float(np.linalg.norm((self.goal - self.player.pos)[[0, 2]]))
 
     # ── expert ──
-    def expert(self) -> Action:
+    def expert(self):
         p = self.player
         if self.phase == "lobby":
             self.say("in the lobby, wait for the round to start")
@@ -516,17 +505,17 @@ class MurderMystery2(Env):
         self.say("collect coins near other players")
         return self._go(self._crowd_goal(p.pos))
 
-    def _tap(self, k: str) -> Action:
-        """Press k, releasing first if it's still held: a held key isn't a new press."""
+    # press k, releasing first if it's still held: a held key isn't a new press
+    def _tap(self, k):
         return Action(cursor=self.cursor) if k in self.held else Action(keys=frozenset({k}), cursor=self.cursor)
 
-    def _go(self, goal, stop=1.0) -> Action:
+    def _go(self, goal, stop=1.0):
         self.goal = np.asarray(goal, float)
         nxt = nav(self.player.pos, self.goal)
         return self.steer_to(nxt, stop_dist=stop if np.allclose(nxt, self.goal) else 0.5)
 
-    def _aim_and_fire(self, target) -> Action:
-        """Turn toward the Murderer, put the cursor on their chest, fire once the cursor is already on it."""
+    # turn toward the Murderer, put the cursor on their chest, fire once the cursor is already on it
+    def _aim_and_fire(self, target):
         self.goal = target.pos.copy()
         a = self.steer_to(target.pos, keys=(), stop_dist=99)
         chest = target.pos + [0, 2.5, 0]
@@ -541,7 +530,7 @@ class MurderMystery2(Env):
         return a
 
 
-def _in_hand(h: Humanoid, item: str):
+def _in_hand(h, item):
     fx, fz = math.sin(h.face), math.cos(h.face)
     rx, rz = math.cos(h.face), -math.sin(h.face)
     p = h.pos + [rx * 1.5 + fx * 1.6, 2.4, rz * 1.5 + fz * 1.6]   # held out in front of the right hand
@@ -549,7 +538,7 @@ def _in_hand(h: Humanoid, item: str):
             (0.85, 0.85, 0.9) if item == "knife" else (0.12, 0.12, 0.14))
 
 
-def _over(p, rect) -> bool:
+def _over(p, rect):
     x, y, w, h = rect
     return x <= p[0] <= x + w and y <= p[1] <= y + h
 
@@ -557,7 +546,7 @@ def _over(p, rect) -> bool:
 if __name__ == "__main__":
     import pickle
     import time
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
 
     def rand_action(rng):
         return Action(keys=frozenset(k for k in KEYS if k not in ("esc",) and rng.random() < 0.12), look_x=float(rng.normal(0, 12)),

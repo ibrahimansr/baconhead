@@ -1,22 +1,9 @@
-"""DOORS: a dim hotel of numbered rooms you go through one door at a time, while things hunt you.
-
-  doors      every room's exit has a number plate (0001, 0002, …) and swings open as you walk up to it
-  keys       some doors are locked: the key is in one of that room's dressers ("Open" it, "Pick up" the key),
-             then "Unlock" the door
-  Rush       the lights flicker for a few seconds, then Rush tears through the rooms; anyone not hidden in a
-             wardrobe ("Hide", E again to leave) in the room it passes dies
-  Screech    in a dark room: "Psst!" and something small appears beside you; look at it within 2 s or lose 40 HP
-Dying ends the run, like the real game. Lamps are point lights; dark rooms have none.
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, HEAD_Y, Env, Prompt, health_hud, night_theme
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, HEAD_Y, Env, Prompt, health_hud, night_theme
 
 H = 13.0               # room half-size (interior is 26x26)
 WALL_H = 10.0
@@ -31,22 +18,22 @@ COL = dict(wall=(0.55, 0.42, 0.30), floor=(0.45, 0.12, 0.12), ceil=(0.33, 0.28, 
            wardrobe=(0.38, 0.24, 0.14), dresser=(0.52, 0.34, 0.20), key=(1.0, 0.85, 0.2), lamp=(1.0, 0.85, 0.55))
 
 
-def _dir(a: float) -> np.ndarray:
+def _dir(a):
     return np.array([math.sin(a), math.cos(a)])
 
 
 class Doors(Env):
     name = "doors"
     train_steps = 3000
-    eval_kw: dict = {}
+    eval_kw = {}
     respawn_s = 1e9       # death ends the run
 
-    def build(self) -> None:
+    def build(self):
         r = self.rng
         self.n_rooms = int(self.kw.get("rooms", 50))
         self.max_steps = int(self.kw.get("max_steps", self.train_steps))
         self.rooms, self.doors, self.closets, self.drawers, self.keys = [], {}, [], [], {}
-        self.room_prompts: list[list[Prompt]] = []
+        self.room_prompts = []
         c, heading, ent = np.zeros(2), 0.0, None
         for k in range(self.n_rooms):
             exit_a = heading if k < self.n_rooms - 1 else None
@@ -61,7 +48,7 @@ class Doors(Env):
         self.room, self.best_room, self.room_t = 0, 0, 0.0
         self.hidden = -1
         self.e_lock = False
-        self.key_held: set[int] = set()
+        self.key_held = set()
         self.rush_warn, self.rush_on, self.rush_end = 0.0, False, -9.0
         self.rush_path, self.rush_s, self.rush_pos = [], 0.0, None
         self.screech_pos, self.screech_t, self.screech_done = None, 0.0, set()
@@ -70,8 +57,8 @@ class Doors(Env):
         self.cam.yaw, self.cam.pitch = 0.0, math.radians(15)
 
     # ── geometry ──
-    def _wall(self, c, a, gap: bool):
-        """Wall on side a of a room centred at c (2D), with a door-sized gap if asked."""
+    # wall on side a of a room centred at c (2D), with a door-sized gap if asked
+    def _wall(self, c, a, gap):
         w = self.world
         n = _dir(a)
         t = np.array([n[1], -n[0]])
@@ -104,7 +91,7 @@ class Doors(Env):
         if k == 0 and ent is None:
             free = [a for a in free if not same(a, math.pi)] or free   # keep the wall behind spawn bare
         lamp = w.add((c[0], WALL_H - 0.3, c[1]), (1.6, 0.4, 1.6), COL["lamp"] if not dark else (0.3, 0.3, 0.3), neon=not dark, collide=False)
-        prompts: list[Prompt] = []
+        prompts = []
         room = dict(c=c.copy(), exit=exit_a, dark=dark, lamp=lamp)
         self.rooms.append(room)
 
@@ -168,7 +155,7 @@ class Doors(Env):
         self.room_prompts.append(prompts)
 
     # ── prompt callbacks (plain method names, so the env pickles) ──
-    def _free(self) -> bool:
+    def _free(self):
         return not self.e_lock and self.player.alive
 
     def _hide_ok(self, i):
@@ -237,7 +224,7 @@ class Doors(Env):
             self.world.visible[d["lock"]] = False
 
     # ── simulation ──
-    def _room_of(self, p) -> int:
+    def _room_of(self, p):
         for k in range(max(0, self.room - 2), min(len(self.rooms), self.room + 3)):
             c = self.rooms[k]["c"]
             if abs(p[0] - c[0]) < H + 0.4 and abs(p[2] - c[1]) < H + 0.4:
@@ -250,7 +237,7 @@ class Doors(Env):
             out += self.room_prompts[k]
         return out
 
-    def on_substep(self) -> None:
+    def on_substep(self):
         p = self.player
         if "e" not in self.held:
             self.e_lock = False
@@ -335,12 +322,12 @@ class Doors(Env):
             self.screech_t = SCREECH_TIME
             self.toast("Psst!", 2)
 
-    def on_death(self) -> None:
+    def on_death(self):
         self.reward -= 2.0
         self.done = True
 
     # ── rendering ──
-    def scene_theme(self) -> dict:
+    def scene_theme(self):
         flick = self.rush_warn > 0 and (int(self.t * 12) % 3 == 0 or int(self.t * 7) % 4 == 1)
         lights = []
         if not flick:
@@ -350,7 +337,7 @@ class Doors(Env):
                     lights.append((rm["c"][0], WALL_H - 1.5, rm["c"][1], 19.0, 1.1, 0.85, 0.55))   # reaches the corners, spills only near doorways
         return night_theme(self.theme, 0.97, lights)
 
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         if self.rush_pos is not None:   # a black mass with a pale, stretched face
             x, y, z = self.rush_pos
@@ -364,7 +351,7 @@ class Doors(Env):
                     ((x, y + 0.05, z), (0.4, 0.15, 0.95), self.cam.yaw, (0.9, 0.9, 0.9), 1)]
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         els = [dict(kind="text", rect=(0.4, 0.02, 0.2, 0.06), text=f"Room {self.room:04d}", size=26, align="center",
                     color=(0.95, 0.85, 0.6))]
         els += health_hud(self.player.health)
@@ -382,15 +369,15 @@ class Doors(Env):
                     dict(kind="panel", rect=(0, 0.58, 1, 0.42), color=(0.02, 0.015, 0.01), alpha=0.95)]
         return els
 
-    def info(self) -> dict:
+    def info(self):
         return dict(room=self.room, best_room=self.best_room, health=self.player.health, alive=self.player.alive,
                     hidden=self.hidden >= 0, deaths=self.deaths)
 
-    def score(self) -> float:
+    def score(self):
         return float(self.best_room)
 
     # ── expert ──
-    def expert(self) -> Action:
+    def expert(self):
         p = self.player
         self.goal = None
         if not p.alive:
@@ -445,18 +432,18 @@ class Doors(Env):
         self.say("walk to the next door")
         return self._go(inside, stop=0.3)
 
-    def _go(self, goal, stop=0.6) -> Action:
+    def _go(self, goal, stop=0.6):
         self.goal = np.asarray(goal, float)
         return self.steer_to(self.goal, stop_dist=stop)
 
-    def _press(self, trigger) -> Action:
-        """Hold E only while the right prompt is the active one, and let go between prompts."""
+    # hold E only while the right prompt is the active one, and let go between prompts
+    def _press(self, trigger):
         pr = self.active_prompt()
         if self.e_lock or pr is None or pr.on_trigger[:len(trigger)] != tuple(trigger):
             return Action(cursor=self.cursor)
         return Action(keys=frozenset({"e"}), cursor=self.cursor)
 
-    def _reach(self, front, trigger) -> Action:
+    def _reach(self, front, trigger):
         p = self.player
         if np.linalg.norm((front - p.pos)[[0, 2]]) > 1.2:
             a = self._go(front, stop=0.5)
@@ -467,7 +454,7 @@ class Doors(Env):
         self.goal = np.asarray(front, float)
         return self._press(trigger)
 
-    def _look_at(self, q) -> Action:
+    def _look_at(self, q):
         v = q - self.cam.pos
         want_yaw = math.atan2(v[0], v[2])
         want_pitch = -math.atan2(v[1], math.hypot(v[0], v[2]))
@@ -475,8 +462,8 @@ class Doors(Env):
         ep = math.degrees(want_pitch - self.cam.pitch)
         return Action(look_x=float(np.clip(ey, -30, 30)), look_y=float(np.clip(ep, -10, 10)), cursor=self.cursor)
 
-    def potential(self) -> float:
-        """Closeness to the expert's next target, and being hidden while Rush is coming."""
+    # closeness to the expert's next target, and being hidden while Rush is coming
+    def potential(self):
         self.expert()
         threat = self.rush_warn > 0 or self.rush_on
         phi = 0.5 if (threat and self.hidden >= 0) else 0.0
@@ -489,7 +476,7 @@ if __name__ == "__main__":
     import os
     import pickle
     import time
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     ticks = 3000
     for seed in (0, 1, 2):
         env = Doors(seed=seed, max_steps=ticks)
@@ -528,7 +515,7 @@ if __name__ == "__main__":
 
     # renders of the key moments
     from PIL import Image
-    from sim.render import render
+    from baconhead.sim.render import render
     os.makedirs("/tmp/bh/doors", exist_ok=True)
     shots, want = {}, ("start", "locked", "warn", "rush", "hidden", "screech", "dark")
     for seed in range(12):

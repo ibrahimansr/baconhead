@@ -1,22 +1,10 @@
-"""Grow a Garden: buy seeds from Sam, plant them in your plot, water, collect the fruit, sell it to Steven.
-
-Mechanics follow the real game, with growth scaled to minutes: you start with 20 Sheckles; Sam's Seed Shop
-has limited stock that restocks every 5 minutes; bought seeds land in the hotbar; with a seed equipped,
-clicking your soil plants it in that cell; single-harvest crops (Carrot, Watermelon) are collected once,
-multi-harvest crops (Strawberry, Blueberry, Tomato) keep regrowing fruit; ripe fruit has a Collect prompt
-and can roll a mutation (Gold 20x, Rainbow 50x); Steven buys your whole inventory; the gear shop sells a
-Watering Can that speeds up a plant when you click it.
-"""
-
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Humanoid, Prompt, avatar_boxes, hotbar_hud, _inside
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Humanoid, Prompt, avatar_boxes, hotbar_hud, _inside
 
 # kind: (price, grow s, regrow s or 0 for single-harvest, fruit value, max fruits, restock range, colour)
 SEEDS = {
@@ -55,7 +43,7 @@ class GrowAGarden(Env):
     name = "garden"
     train_steps = 3000
 
-    def build(self) -> None:
+    def build(self):
         w, r = self.world, self.rng
         self.max_steps = int(self.kw.get("max_steps", 6000))
         w.add((0, -0.5, 0), (300, 1, 240), (0.35, 0.65, 0.3))
@@ -88,12 +76,12 @@ class GrowAGarden(Env):
         self.sheckles = 20.0
         self.seeds = {k: 0 for k in SEEDS}
         self.can_uses = 0
-        self.inventory: list[tuple[str, float, str]] = []      # (kind, value, mutation)
-        self.plants: dict[tuple, Plant] = {}
-        self.stock: dict[str, int] = {}
+        self.inventory = []      # (kind, value, mutation)
+        self.plants = {}
+        self.stock = {}
         self._restock()
         self.next_restock = RESTOCK_S
-        self.fruit_prompts: dict[int, Prompt] = {}
+        self.fruit_prompts = {}
         self._fid = 0
         self.statics = [Prompt(pos=SAM + [0, 2.5, -2], action="Talk", obj="Sam", on_trigger=("_open", "seeds")),
                         Prompt(pos=STEVEN + [0, 2.5, -2], action="Sell Inventory", obj="Steven", hold=0.5, on_trigger=("_sell",)),
@@ -109,24 +97,24 @@ class GrowAGarden(Env):
         return np.array([0.0, 0.0, -14.0])
 
     # ── economy ──
-    def _restock(self) -> None:
+    def _restock(self):
         self.stock = {k: int(self.rng.integers(v[5][0], v[5][1] + 1)) for k, v in SEEDS.items()}
 
-    def _networth(self) -> float:
+    def _networth(self):
         nw = self.sheckles + sum(v for _, v, _ in self.inventory) + sum(SEEDS[k][0] * n for k, n in self.seeds.items())
         for p in self.plants.values():
             nw += SEEDS[p.kind][0] + sum(self._fruit_value(p.kind, f) for f in p.fruits if p.age >= f.ripe_at)
         return nw
 
     @staticmethod
-    def _fruit_value(kind: str, f: Fruit) -> float:
+    def _fruit_value(kind, f):
         mult = next((m for n, m, _ in MUTATIONS if n == f.mutation), 1.0)
         return SEEDS[kind][3] * mult
 
-    def _open(self, what: str) -> None:
+    def _open(self, what):
         self.ui = what
 
-    def _sell(self) -> None:
+    def _sell(self):
         if not self.inventory:
             self.toast("You have no fruit to sell")
             return
@@ -135,7 +123,7 @@ class GrowAGarden(Env):
         self.toast(f"Sold {len(self.inventory)} fruit for ${total:,.0f}")
         self.inventory = []
 
-    def _collect(self, cell: tuple, fid: int) -> None:
+    def _collect(self, cell, fid):
         p = self.plants.get(cell)
         f = next((f for f in p.fruits if f.id == fid), None) if p else None
         if f is None or p.age < f.ripe_at:
@@ -148,7 +136,7 @@ class GrowAGarden(Env):
         else:
             p.next_fruit = max(p.next_fruit, p.age + SEEDS[p.kind][2])
 
-    def _new_fruit(self, p: Plant, ripe_at: float) -> None:
+    def _new_fruit(self, p, ripe_at):
         cx, cz = self._cell_center(p.cell)
         n = len(p.fruits)
         ang = self._fid * 2.1
@@ -162,32 +150,32 @@ class GrowAGarden(Env):
         p.fruits.append(Fruit(id=self._fid, pos=np.array([cx + off[0], 0.3 + h + 0.25 * n, cz + off[1]]), ripe_at=ripe_at, mutation=mut))
         self._fid += 1
 
-    def _cell_center(self, cell) -> tuple:
+    def _cell_center(self, cell):
         x0, z0 = PLOT_C[0] - GRID * CELL / 2, PLOT_C[2] - GRID * CELL / 2
         return x0 + (cell[0] + 0.5) * CELL, z0 + (cell[1] + 0.5) * CELL
 
-    def _cell_at(self, p) -> tuple | None:
+    def _cell_at(self, p):
         x0, z0 = PLOT_C[0] - GRID * CELL / 2, PLOT_C[2] - GRID * CELL / 2
         i, j = int((p[0] - x0) // CELL), int((p[2] - z0) // CELL)
         return (i, j) if 0 <= i < GRID and 0 <= j < GRID else None
 
     # ── items and clicks ──
-    def items(self) -> list[str]:
+    def items(self):
         out = [k for k in SEEDS if self.seeds[k] > 0]
         return out + (["Watering Can"] if self.can_uses > 0 else [])
 
-    def _item_label(self, it: str) -> str:
+    def _item_label(self, it):
         return f"{it[:5]} x{self.can_uses}" if it == "Watering Can" else f"{it[:6]} x{self.seeds[it]}"
 
-    def on_key(self, k: str) -> None:
+    def on_key(self, k):
         self._equip(int(k) - 1)
 
-    def _equip(self, i: int) -> None:
+    def _equip(self, i):
         its = self.items()
         if i < len(its):
             self.equipped = None if self.equipped == its[i] else its[i]
 
-    def on_ui(self, id_: str) -> None:
+    def on_ui(self, id_):
         if id_.startswith("slot:"):
             self._equip(int(id_[5:]))
         elif id_ == "close":
@@ -212,7 +200,7 @@ class GrowAGarden(Env):
             else:
                 self.toast("Not enough Sheckles!")
 
-    def on_world_click(self, part: int) -> None:
+    def on_world_click(self, part):
         if part != self.soil or not self.equipped:
             return
         d = self.cam.ray(self.cursor[0], self.cursor[1], self.aspect)
@@ -233,7 +221,7 @@ class GrowAGarden(Env):
             self.equipped = None
 
     # ── simulation ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         if self.t >= self.next_restock:
             self._restock()
             self.next_restock += RESTOCK_S
@@ -263,7 +251,7 @@ class GrowAGarden(Env):
             self.done = True
 
     # ── rendering ──
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         for h in self.keepers:
             out += avatar_boxes(h)
@@ -278,7 +266,7 @@ class GrowAGarden(Env):
         return out
 
     @staticmethod
-    def _plant_boxes(kind, cx, cz, g) -> list:
+    def _plant_boxes(kind, cx, cz, g):
         h = 0.3 + 1.2 * g
         if SEEDS[kind][4] == 1:   # carrots and melons are just leaves above the soil
             return [((cx, 0.3 + h * 0.4, cz), (0.6, h * 0.8, 0.6), 0.3, (0.25, 0.7, 0.2))]
@@ -286,12 +274,12 @@ class GrowAGarden(Env):
                 ((cx, 0.3 + h, cz), (1.8 * g + 0.3, 0.8 * g + 0.2, 1.8 * g + 0.3), 0.6, (0.25, 0.65, 0.25))]
 
     @staticmethod
-    def _fruit_box(kind, f: Fruit, g):
+    def _fruit_box(kind, f, g):
         s = (0.5 if SEEDS[kind][4] > 1 else (0.7 if kind == "Carrot" else 1.8)) * g
         col = {"Gold": (1.0, 0.8, 0.1), "Rainbow": (1.0, 0.3, 0.9)}.get(f.mutation, SEEDS[kind][6])
         return (tuple(f.pos), (s, s, s), 0.0, col, bool(f.mutation))
 
-    def hud(self) -> list:
+    def hud(self):
         els = [dict(kind="leaderboard", cols=["Sheckles"], rows=[["You", f"{self.sheckles:,.0f}"]]),
                dict(kind="panel", rect=(0.02, 0.12, 0.2, 0.07), color=(0.1, 0.25, 0.1), alpha=0.75),
                dict(kind="text", rect=(0.03, 0.12, 0.19, 0.07), text=f"{self.sheckles:,.0f} Sheckles", size=24, color=(0.5, 1.0, 0.45)),
@@ -319,7 +307,7 @@ class GrowAGarden(Env):
                     dict(kind="button", id="buy_can", rect=(0.54, 0.42, 0.1, 0.07), text=f"${CAN_PRICE}", color=(0.2, 0.7, 0.3))]
         return els
 
-    def _shop_ui(self) -> list:
+    def _shop_ui(self):
         left = self.next_restock - self.t
         X = 0.04   # left of centre, so Sam's Talk prompt (over his head, mid-screen) never covers the buttons
         els = [dict(kind="panel", rect=(X, 0.25, 0.4, 0.62), color=(0.32, 0.22, 0.12), alpha=0.95),
@@ -337,22 +325,22 @@ class GrowAGarden(Env):
                          color=(0.2, 0.7, 0.3) if self.stock[k] else (0.4, 0.4, 0.4))]
         return els
 
-    def info(self) -> dict:
+    def info(self):
         return dict(sheckles=round(self.sheckles), networth=round(self._networth()), plants=len(self.plants),
                     fruit=len(self.inventory))
 
-    def score(self) -> float:
+    def score(self):
         return math.log10(max(1.0, self._networth()))   # you start at log10(20) = 1.3
 
-    def potential(self) -> float:
-        """Closer to the expert's next goal, and fewer ripe fruits left uncollected."""
+    # closer to the expert's next goal, and fewer ripe fruits left uncollected
+    def potential(self):
         self.goal = None
         self.expert()
         phi = -0.01 * float(np.linalg.norm((self.goal - self.player.pos)[[0, 2]])) if self.goal is not None else 0.0
         return phi - 0.02 * min(20, len(self.fruit_prompts))
 
     # ── expert: buy → plant → water → collect → sell ──
-    def expert(self) -> Action:
+    def expert(self):
         p = self.player
         if self.ui == "seeds":
             free = GRID * GRID - len(self.plants) - sum(self.seeds.values())
@@ -398,41 +386,41 @@ class GrowAGarden(Env):
         self.say("plants are growing, wait by the garden")
         return self._go(PLOT_C + [0, 0, -GRID * CELL / 2 - 3], stop=3)
 
-    def _best_seed(self, free: int, cash: float | None = None):
+    def _best_seed(self, free, cash=None):
         cash = self.sheckles if cash is None else cash
         if free <= 0:
             return None
         ok = [k for k, v in SEEDS.items() if self.stock[k] > 0 and v[0] <= cash]
         return max(ok, key=lambda k: SEEDS[k][0]) if ok else None
 
-    def _go(self, goal, stop=1.5) -> Action:
+    def _go(self, goal, stop=1.5):
         self.goal = np.asarray(goal, float)
         a = self.steer_to(self.goal, stop_dist=stop)
         a.look_y = float(np.clip(math.degrees(math.radians(28) - self.cam.pitch), -10, 10))
         return a
 
-    def _prompt_at(self, where, pr: Prompt) -> Action:
+    def _prompt_at(self, where, pr):
         a = self._go(where + [0, 0, -1.5], stop=2.5)
         if self.active_prompt() is pr:
             a.keys = a.keys | {"e"}
         return a
 
-    def _point(self, uv, base: Action | None = None) -> Action:
-        """Cursor onto the target first, click on the next tick once it's there."""
+    # cursor onto the target first, click on the next tick once it's there
+    def _point(self, uv, base=None):
         a = base or Action()
         on = abs(self.cursor[0] - uv[0]) < 0.012 and abs(self.cursor[1] - uv[1]) < 0.02
         a.cursor, a.click = tuple(uv), on
         return a
 
-    def _click_ui(self, id_) -> Action:
+    def _click_ui(self, id_):
         for el in self.hud():
             if el.get("id") == id_:
                 x, y, w, h = el["rect"]
                 return self._point((x + w / 2, y + h / 2))
         return Action(cursor=self.cursor)
 
-    def _use_on_cell(self, item: str, cell) -> Action:
-        """Equip the item from the hotbar, walk close, look at the cell, click it."""
+    # equip the item from the hotbar, walk close, look at the cell, click it
+    def _use_on_cell(self, item, cell):
         if self.equipped != item:
             return self._click_ui(f"slot:{self.items().index(item)}")
         cx, cz = self._cell_center(cell)
@@ -453,7 +441,7 @@ class GrowAGarden(Env):
 if __name__ == "__main__":
     import pickle
     import time
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     TICKS = 3000   # 5 minutes
     for seed in (0, 1, 2):
         env = GrowAGarden(seed=seed, max_steps=TICKS)

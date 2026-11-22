@@ -1,12 +1,3 @@
-"""The one action space shared by the sims, the model, and the real-Roblox controller.
-
-One action = what the hands do during one 100ms tick. Everything a Roblox game can ask of you
-on a Mac fits in it: held keys, a right-drag camera turn, an absolute cursor position, a left
-click, and a scroll notch for zoom.
-"""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import numpy as np
@@ -34,7 +25,7 @@ class Action:
     click: bool = False
     scroll: int = 0
 
-    def to_ids(self) -> dict:
+    def to_ids(self):
         return {
             "keys": np.array([k in self.keys for k in KEYS], dtype=np.float32),
             "look_x": _nearest(LOOK_X, self.look_x),
@@ -46,7 +37,7 @@ class Action:
         }
 
     @classmethod
-    def from_ids(cls, ids: dict) -> "Action":
+    def from_ids(cls, ids):
         keys = frozenset(k for k, on in zip(KEYS, ids["keys"]) if on > 0.5)
         return cls(
             keys=keys,
@@ -58,12 +49,12 @@ class Action:
         )
 
 
-def _nearest(bins, v: float) -> int:
+def _nearest(bins, v):
     return int(np.argmin([abs(b - v) for b in bins]))
 
 
-def quantize(a: Action) -> Action:
-    """What the action looks like after a round trip through the policy's heads."""
+# what the action looks like after a round trip through the policy's heads
+def quantize(a):
     return Action.from_ids(a.to_ids())
 
 

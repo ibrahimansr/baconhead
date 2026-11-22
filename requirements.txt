@@ -1,13 +1,15 @@
-# baconhead (Python 3.12+): sims, imitation (SFT + DAgger) and RL for a VLM game policy
 numpy>=1.26
-pillow>=10.1          # ImageFont.load_default(size=...) for the HUD
-torch>=2.4            # sim renderer; torch.compile needs clang (xcode-select --install)
-torchvision           # Qwen-VL processors need it
-transformers>=5.17    # Qwen3.5 (qwen3_5); the Modal image pins the exact versions it trained with
-trl>=1.14             # SFTTrainer
-peft                  # LoRA (DAgger rounds, RL)
+pillow>=10.1
+torch>=2.4
+torchvision
+transformers>=5.20
+trl>=1.14
+peft
 datasets
 accelerate
-modal>=1.0            # data, training and evals in the cloud (train/modal_app.py)
-openai                # train/frontier.py: API baselines (gpt-6.1-sol, OpenRouter models)
-anthropic             # train/frontier.py: Claude baseline
+modal>=1.0
+requests
+mss
+pyobjc-framework-Quartz
+pyobjc-framework-Cocoa
+pandas

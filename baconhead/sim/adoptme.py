@@ -1,23 +1,9 @@
-"""Adopt Me-style pet care: the cursor-heavy one. Almost every task is a chain of clicks:
-
-  hungry/thirsty  click the shop counter → shop panel → click an item → confirm Buy → Backpack → click the
-                  item to equip it → click your pet → pet menu → "Use"
-  sleepy/dirty    click the bed/bathtub in your house (ClickDetectors), stay near it
-  sick            click the doctor → confirm
-  bored/camping   stand in the Playground / Campsite
-  travel          Map button → click a location to teleport, like Adopt Me's map
-Buttons light up under the cursor. Modal pop-ups (daily reward, offers) sink clicks until closed.
-Bucks per task follow the wiki: food/drink 6, sleepy 14, dirty 7.
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Room, route
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Room, route
 
 TASKS = {   # name: (how, bucks, seconds, where)
     "hungry": ("food:hungry", 6, 3.0, "Pizza Shop"),
@@ -42,8 +28,8 @@ TP_DIST = 45.0   # the expert takes the map for trips longer than this
 PET_FOLLOW = 3.5
 
 
+# four walls, a roof, and a doorway on the `side` z face (-1 or +1). Returns the Room for routing
 def _building(w, cx, cz, sx, sz, col, door_w=6.0, h=12.0, side=-1):
-    """Four walls, a roof, and a doorway on the `side` z face (-1 or +1). Returns the Room for routing."""
     zd = cz + side * sz / 2
     w.add((cx, h / 2, cz - side * sz / 2), (sx, h, 1), col)
     w.add((cx - sx / 2, h / 2, cz), (1, h, sz), col)
@@ -60,10 +46,10 @@ def _building(w, cx, cz, sx, sz, col, door_w=6.0, h=12.0, side=-1):
 class AdoptMe(Env):
     name = "adoptme"
 
-    def score(self) -> float:
+    def score(self):
         return float(self.pet_xp)           # pet tasks completed
 
-    def build(self) -> None:
+    def build(self):
         r, w = self.rng, self.world
         self.max_steps = int(self.kw.get("max_steps", 6000))
         w.add((0, -0.5, 0), (500, 1, 500), (0.4, 0.68, 0.33))
@@ -115,11 +101,11 @@ class AdoptMe(Env):
 
         self.bucks = 50
         self.inventory = {k: 0 for k in FOODS}
-        self.needs: list[str] = []
+        self.needs = []
         self.next_need = 3.0
         self.activity = None          # (task, seconds left, anchor, radius)
-        self.ui = None                # None | "backpack" | "map" | "pet" | ("shop", s) | ("buy", item) | "doctor" | "choose" | "daily" | "offer"
-        self.choices: list[str] = []
+        self.ui = None                # none | "backpack" | "map" | "pet" | ("shop", s) | ("buy", item) | "doctor" | "choose" | "daily" | "offer"
+        self.choices = []
         self.next_popup = float(r.uniform(30, 60))
         self.cam.yaw = math.pi
         self.cam.pitch = math.radians(20)
@@ -128,7 +114,7 @@ class AdoptMe(Env):
         return np.array([0.0, 0.0, 20.0])
 
     # ── clicks ──
-    def on_ui(self, id_: str) -> None:
+    def on_ui(self, id_):
         if id_ == "modal_bg":
             return
         if id_ in ("backpack", "map"):
@@ -195,7 +181,7 @@ class AdoptMe(Env):
                 self.needs[self.needs.index("choose")] = n
             self.ui = None
 
-    def on_world_click(self, part: int) -> None:
+    def on_world_click(self, part):
         if self.ui not in (None, "backpack"):
             return
         tag = self.world.tags[part] or ""
@@ -216,7 +202,7 @@ class AdoptMe(Env):
         self.activity = [need, TASKS[need][2], np.asarray(anchor, float).copy(), radius]
 
     # ── simulation ──
-    def on_substep(self) -> None:
+    def on_substep(self):
         r = self.rng
         self.next_need -= DT
         if self.next_need <= 0 and len(self.needs) < 4:
@@ -251,7 +237,7 @@ class AdoptMe(Env):
         if self.steps >= self.max_steps:
             self.done = True
 
-    def _pet(self) -> None:
+    def _pet(self):
         p = self.player
         if self.activity and self.activity[0] in ("sleepy", "dirty"):
             goal = self.activity[2] + [0, 0, 0]
@@ -273,7 +259,7 @@ class AdoptMe(Env):
             w.yaw[i] = w.yaw0[i] = self.pet_face
 
     # ── UI ──
-    def hud(self) -> list:
+    def hud(self):
         els = [dict(kind="panel", rect=(0.42, 0.015, 0.16, 0.06), color=(0.1, 0.35, 0.1), alpha=0.8),
                dict(kind="text", rect=(0.42, 0.015, 0.16, 0.06), text=f"$ {self.bucks}", size=26, color=(0.5, 1.0, 0.4), align="center"),
                dict(kind="button", id="backpack", rect=(0.37, 0.88, 0.12, 0.09), text="Backpack", color=(0.2, 0.55, 0.95)),
@@ -298,7 +284,7 @@ class AdoptMe(Env):
         els += self._ui_els()
         return els
 
-    def _ui_els(self) -> list:
+    def _ui_els(self):
         u = self.ui
         X = lambda x, y: dict(kind="button", id="close", rect=(x, y, 0.035, 0.06), text="X", color=(0.85, 0.2, 0.2))
         if u is None:
@@ -358,7 +344,7 @@ class AdoptMe(Env):
                     X(0.655, 0.31)]
         return els
 
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         if not self.equipped:
             return []
         h = self.player
@@ -366,9 +352,8 @@ class AdoptMe(Env):
         rx, rz = math.cos(h.face), -math.sin(h.face)
         return [((h.pos[0] + rx * 1.5 + fx * 0.8, h.pos[1] + 2.2, h.pos[2] + rz * 1.5 + fz * 0.8), (1, 0.4, 1), h.face, FOODS[self.equipped][2])]
 
-    def potential(self) -> float:
-        """Sub-steps of the most urgent need (item bought → equipped → activity running → its progress),
-        closeness to where it gets done, and a penalty while a pop-up blocks the screen."""
+    # sub-steps of the most urgent need (item bought → equipped → activity running → its progress), closeness to where it gets done, and a penalty while a pop-up blocks the screen
+    def potential(self):
         self.goal = None
         self.expert()
         phi = -0.3 if self.ui in ("daily", "offer", "choose") else 0.0
@@ -383,11 +368,11 @@ class AdoptMe(Env):
             phi += 0.3 * any(self.inventory[x] > 0 for x in items) + 0.3 * (self.equipped in items)
         return phi
 
-    def info(self) -> dict:
+    def info(self):
         return dict(bucks=self.bucks, tasks_done=self.pet_xp, needs=len(self.needs))
 
     # ── expert: what a practised Adopt Me player does, in order ──
-    def expert(self) -> Action:
+    def expert(self):
         u = self.ui
         if u in ("daily", "offer"):
             self.say("daily reward pop-up is open, claim it" if u == "daily" else "an offer pop-up is open, close it")
@@ -466,8 +451,8 @@ class AdoptMe(Env):
             return self._click_ui("close")
         return then()
 
-    def _travel(self, goal, click=False, stop=5.0) -> Action:
-        """Far away and outside: open the Map and teleport to the nearest stop, like players do."""
+    # far away and outside: open the Map and teleport to the nearest stop, like players do
+    def _travel(self, goal, click=False, stop=5.0):
         goal = np.asarray(goal, float)
         far = float(np.linalg.norm((goal - self.player.pos)[[0, 2]])) > TP_DIST
         if far and not any(rm.inside(self.player.pos) for rm in self.rooms):
@@ -476,26 +461,26 @@ class AdoptMe(Env):
             return self._click_ui("map")
         return self._click_world(goal, stop=stop) if click else self._walk(goal, stop=stop)
 
-    def _walk(self, goal, stop=1.5) -> Action:
+    def _walk(self, goal, stop=1.5):
         self.goal = np.asarray(goal, float)
         nxt = route(self.player.pos, np.asarray(goal, float), self.rooms)
         return self.steer_to(nxt, stop_dist=stop if np.allclose(nxt, goal) else 1.0)
 
-    def _point(self, uv, look=None) -> Action:
-        """Move the cursor onto the target first, click on the next tick once it's there: how hands do it."""
+    # move the cursor onto the target first, click on the next tick once it's there: how hands do it
+    def _point(self, uv, look=None):
         a = look or Action()
         on = abs(self.cursor[0] - uv[0]) < 0.012 and abs(self.cursor[1] - uv[1]) < 0.02
         a.cursor, a.click = tuple(uv), on
         return a
 
-    def _click_ui(self, id_) -> Action:
+    def _click_ui(self, id_):
         for el in self.hud():
             if el.get("id") == id_:
                 x, y, w, h = el["rect"]
                 return self._point((x + w / 2, y + h / 2))
         return Action(cursor=self.cursor)
 
-    def _click_world(self, p, stop=5.0) -> Action:
+    def _click_world(self, p, stop=5.0):
         self.goal = np.asarray(p, float)
         d = float(np.linalg.norm((p - self.player.pos)[[0, 2]]))
         if d > stop or not np.allclose(route(self.player.pos, p, self.rooms), p):
@@ -520,7 +505,7 @@ if __name__ == "__main__":
     print(f"expert: {info}, return {R:.2f}, {(time.time() - t0) / env.steps * 1000:.1f} ms/tick")
     env = AdoptMe(seed=0, max_steps=3000)
     rng = np.random.default_rng(0)
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     R = 0.0
     while not env.done:
         r, _, _ = env.step(Action(keys=frozenset(k for k in KEYS if rng.random() < 0.1), look_x=float(rng.normal(0, 10)),

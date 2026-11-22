@@ -1,17 +1,3 @@
-"""Gold solutions: one fixed level per game, a concrete goal, and a hand-written plan that reaches it.
-
-    python -m sim.gold --check            # replay every results/gold/<game>.json and assert its goal
-    python -m sim.gold --make obby        # re-run a plan and rewrite its gold file (+ an mp4 with --video)
-
-The plan for each game is written for that level: which platform, prompt, button or enemy, in what order. Moves are
-built from a few helpers (walk to a point, hold a key, click a spot, wait), and the few timing-critical moves (an
-obby jump onto a fading part) are found by trying candidates from a savestate, like a TAS. The scripted experts are
-not used. Every tick is round-tripped through the action-text codec before the game sees it, so a gold file is
-exactly what a model would have to output, and replaying it reproduces the run tick for tick.
-"""
-
-from __future__ import annotations
-
 import argparse
 import json
 import math
@@ -20,24 +6,24 @@ import pickle
 
 import numpy as np
 
-import sim
-from core.actions import Action
-from model.vlm import decode, encode_tick
+from baconhead import sim
+from baconhead.core.actions import Action
+from baconhead.model.vlm import decode, encode_tick
 
 SEED = 999_000          # the first held-out eval seed: nothing was trained on it
 OUT = "results/gold"
 
 
+# an env plus the inputs played so far. Helpers append ticks; snapshot()/restore() are savestates
 class Run:
-    """An env plus the inputs played so far. Helpers append ticks; snapshot()/restore() are savestates."""
 
-    def __init__(self, game: str, kw: dict):
+    def __init__(self, game, kw):
         self.game, self.kw = game, kw
         self.env = sim.make(game, seed=SEED, max_steps=10 ** 9, **kw)
-        self.texts: list[str] = []
+        self.texts = []
         self.react = None          # plan-specific reflex checked every walking tick (hide from Rush, ...); True = it acted
 
-    def act(self, a: Action) -> None:
+    def act(self, a):
         prev = self.env.cursor
         text = encode_tick(a, prev)
         self.env.step(decode(text, prev)[0][0])   # exactly what replaying the text does
@@ -46,25 +32,25 @@ class Run:
     def snapshot(self):
         return pickle.dumps((self.env, len(self.texts)))
 
-    def restore(self, snap) -> None:
+    def restore(self, snap):
         self.env, n = pickle.loads(snap)
         del self.texts[n:]
 
     # ── moves ──
-    def wait(self, n: int) -> None:
+    def wait(self, n):
         for _ in range(n):
             self.act(Action(cursor=self.env.cursor))
 
-    def hold(self, keys, n: int) -> None:
+    def hold(self, keys, n):
         for _ in range(n):
             self.act(Action(keys=frozenset(keys), cursor=self.env.cursor))
 
-    def tap(self, key: str) -> None:
+    def tap(self, key):
         self.hold({key}, 1)
         self.wait(1)
 
-    def go(self, x: float, z: float, stop: float = 1.2, limit: int = 400, jump: bool = False) -> bool:
-        """Walk to (x, z): turn the camera toward it and hold W, like a player."""
+    # walk to (x, z): turn the camera toward it and hold W, like a player
+    def go(self, x, z, stop=1.2, limit=400, jump=False):
         e = self.env
         for _ in range(limit):
             e = self.env
@@ -76,20 +62,20 @@ class Run:
             self.act(e.steer_to(np.array([x, 0.0, z]), jump=jump, stop_dist=stop))
         return False
 
-    def face(self, x: float, z: float, limit: int = 20) -> None:
-        """Turn to look at (x, z) without walking."""
+    # turn to look at (x, z) without walking
+    def face(self, x, z, limit=20):
         for _ in range(limit):
             a = self.env.steer_to(np.array([x, 0.0, z]), keys=(), stop_dist=0)
             if abs(a.look_x) < 1:
                 return
             self.act(a)
 
-    def click(self, u: float, v: float) -> None:
+    def click(self, u, v):
         self.act(Action(cursor=(u, v), click=True))
         self.wait(1)
 
-    def button(self, id_: str) -> bool:
-        """Move the cursor onto the on-screen button with this id, then click it (a hover tick, like a player)."""
+    # move the cursor onto the on-screen button with this id, then click it (a hover tick, like a player)
+    def button(self, id_):
         for el in self.env.hud() + self.env.ui_layers():
             if el.get("id") == id_:
                 x, y, w, h = el["rect"]
@@ -99,8 +85,8 @@ class Run:
                 return True
         return False
 
-    def click_world(self, x: float, y: float, z: float, limit: int = 30) -> bool:
-        """Turn toward a spot in the world, tilt the camera until it's on screen, put the cursor on it, click."""
+    # turn toward a spot in the world, tilt the camera until it's on screen, put the cursor on it, click
+    def click_world(self, x, y, z, limit=30):
         e = self.env
         for _ in range(limit):
             a = e.steer_to(np.array([x, 0.0, z]), keys=(), stop_dist=99)
@@ -115,8 +101,8 @@ class Run:
             self.act(Action(cursor=uv))
         return False
 
-    def prompt(self, fn: str, limit: int = 80) -> bool:
-        """Hold E on the prompt in front of you until the one that runs `fn` fires."""
+    # hold E on the prompt in front of you until the one that runs `fn` fires
+    def prompt(self, fn, limit=80):
         for _ in range(limit):
             pr = self.env.active_prompt()
             if pr is None or pr.on_trigger[0] != fn:
@@ -130,12 +116,9 @@ class Run:
 
 # ── one plan per game ──
 
-def plan_obby(r: Run) -> None:
-    """Hop from platform to platform along this course. Each hop is timed from a savestate: wait 0-4 s, then walk at
-    the next platform jumping on tick j, and keep it if it lands on top and is still standing 0.3 s later. A chain of
-    fading parts can be a trap (land just before yours fades while the next is still gone), so when a hop has no
-    timing that works the plan backs up and takes the previous hop later, like a player waiting on the checkpoint."""
-    def options(k: int):
+# hop from platform to platform along this course. Each hop is timed from a savestate: wait 0-4 s, then walk at the next platform jumping on tick j, and keep it if it lands on top and is still standing 0.3 s later. A chain of fading parts can be a trap (land just before yours fades while the next is still gone), so when a hop has no timing that works the plan backs up and takes the previous hop later, like a player waiting on the checkpoint
+def plan_obby(r):
+    def options(k):
         w = r.env.world
         fading = lambda part: getattr(w.motions.get(part), "kind", None) == "vanish"
         moving = r.env.waypoints[k][0] in w.motions or bool(r.env._near_kill())
@@ -147,7 +130,7 @@ def plan_obby(r: Run) -> None:
             for j in (None, "hop", 0, 1, 2, 3, 4, 5, 6, 7, 8):   # "hop": hold Space, bouncing over a spinner's bar
                 yield wait, j
 
-    def hop(k: int, wait: int, j) -> bool:
+    def hop(k, wait, j):
         e = r.env
         part = e.waypoints[k][0]
         r.wait(wait)
@@ -181,12 +164,9 @@ def plan_obby(r: Run) -> None:
                 raise RuntimeError(f"obby: no timing gets past waypoint {deepest + 1} — make this part easier")
 
 
-def plan_doors(r: Run) -> None:
-    """This hotel: rooms 0-2 straight through; door 4 (room 3, dark) is locked, its key is in the dresser by the far
-    wall at (32.5, 45); door 8 (room 7) is locked, key in the dresser at (117, 75.5); then on to room 10. Walk entry →
-    room centre → exit door → next room. Reflexes on the way: when the lights flicker (Rush), hide in the nearest
-    wardrobe and come out once it has passed; when Screech says "Psst!", turn and look at it."""
-    def react() -> bool:
+# this hotel: rooms 0-2 straight through; door 4 (room 3, dark) is locked, its key is in the dresser by the far wall at (32.5, 45); door 8 (room 7) is locked, key in the dresser at (117, 75.5); then on to room 10. Walk entry → room centre → exit door → next room. Reflexes on the way: when the lights flicker (Rush), hide in the nearest wardrobe and come out once it has passed; when Screech says "Psst!", turn and look at it
+def plan_doors(r):
+    def react():
         e = r.env
         if e.screech_pos is not None:
             r.face(e.screech_pos[0], e.screech_pos[2], limit=6)
@@ -205,7 +185,7 @@ def plan_doors(r: Run) -> None:
             return True
         return False
 
-    def through(num: int) -> None:
+    def through(num):
         e = r.env
         d = e.doors[num]
         if d["locked"]:
@@ -228,10 +208,8 @@ def plan_doors(r: Run) -> None:
         through(num)
 
 
-def plan_rivals(r: Run) -> None:
-    """Round 1: the bot spawns 88 studs east behind cover. Walk east until it's in sight and within ~35 studs, then
-    stand and fight: put the crosshair on its chest (head when close), hold fire only while on target, strafe A/D
-    every 0.6 s so its shots miss, reload on empty, and push forward again if it hides."""
+# round 1: the bot spawns 88 studs east behind cover. Walk east until it's in sight and within ~35 studs, then stand and fight: put the crosshair on its chest (head when close), hold fire only while on target, strafe A/D every 0.6 s so its shots miss, reload on empty, and push forward again if it hides
+def plan_rivals(r):
     e = r.env
     start_wins = e.wins
     for t in range(1500):
@@ -262,11 +240,8 @@ def plan_rivals(r: Run) -> None:
         r.act(a)
 
 
-def plan_mm2(r: Run) -> None:
-    """You're the Sheriff (pinned). Nobody's role is visible, so: wait out the lobby, take the gun out (1), keep near
-    the other players (the Murderer hunts whoever's alone), and the moment someone has a knife out where you can
-    see them, turn to them, put the cursor on their chest and click. Shooting an innocent would kill you too,
-    so only the knife counts as proof."""
+# you're the Sheriff (pinned). Nobody's role is visible, so: wait out the lobby, take the gun out (1), keep near the other players (the Murderer hunts whoever's alone), and the moment someone has a knife out where you can see them, turn to them, put the cursor on their chest and click. Shooting an innocent would kill you too, so only the knife counts as proof
+def plan_mm2(r):
     e = r.env
     for t in range(3000):
         if e.rounds:
@@ -294,10 +269,8 @@ def plan_mm2(r: Run) -> None:
         r.act(e.steer_to(near, stop_dist=6.0))
 
 
-def plan_disaster(r: Run) -> None:
-    """Round 1 here is Acid Rain (t=15 s), and you spawn at (7, 19), next to the building at (-5, 5) whose door faces
-    you. Wait for the warning, walk to the doorway (-5, 16.9), step in (-5, 9.9), stand in the middle of the room
-    under the roof until the round is over."""
+# round 1 here is Acid Rain (t=15 s), and you spawn at (7, 19), next to the building at (-5, 5) whose door faces you. Wait for the warning, walk to the doorway (-5, 16.9), step in (-5, 9.9), stand in the middle of the room under the roof until the round is over
+def plan_disaster(r):
     e = r.env
     while e.disaster is None:
         r.wait(1)
@@ -309,11 +282,8 @@ def plan_disaster(r: Run) -> None:
     r.wait(5)
 
 
-def plan_forest(r: Run) -> None:
-    """Night 1 starts at t=60 and lasts 45 s; the fire has 70 fuel and burns 1/s, so it needs 2+ logs (22 each) before
-    dark. Axe out (1); chop the tree 25 studs north at (0.9, 29.3) (4 swings), pick up its log; go south of the two
-    rocks at (-8, 24-28) via (-4, 19) and (-14, 17) to the tree at (-31.8, 11.5), chop, pick up; carry both to the
-    fire and feed it; one more from (17.7, -36.7) if there's daylight left; then stand in the firelight until dawn."""
+# night 1 starts at t=60 and lasts 45 s; the fire has 70 fuel and burns 1/s, so it needs 2+ logs (22 each) before dark. Axe out (1); chop the tree 25 studs north at (0.9, 29.3) (4 swings), pick up its log; go south of the two rocks at (-8, 24-28) via (-4, 19) and (-14, 17) to the tree at (-31.8, 11.5), chop, pick up; carry both to the fire and feed it; one more from (17.7, -36.7) if there's daylight left; then stand in the firelight until dawn
+def plan_forest(r):
     e = r.env
     r.tap("1")
 
@@ -345,12 +315,9 @@ def plan_forest(r: Run) -> None:
         r.wait(1)
 
 
-def plan_fisch(r: Run) -> None:
-    """Onto the pier through its base (0, -4) - it's a plank over water - out to the end (0, 28), face the open
-    water, rod out (1). Cast: hold the mouse while the meter rises, let go near the top. Wait for the bite. Shake:
-    click the Shake button wherever it jumps. Reel: hold to push the white zone right, let go to let it drift left,
-    keeping it over the fish. Then back off the pier the same way to the Merchant (9, -6): E, "Sell All"."""
-    from sim.fisch import CHARGE_PERIOD, RODS
+# onto the pier through its base (0, -4) - it's a plank over water - out to the end (0, 28), face the open water, rod out (1). Cast: hold the mouse while the meter rises, let go near the top. Wait for the bite. Shake: click the Shake button wherever it jumps. Reel: hold to push the white zone right, let go to let it drift left, keeping it over the fish. Then back off the pier the same way to the Merchant (9, -6): E, "Sell All"
+def plan_fisch(r):
+    from baconhead.sim.fisch import CHARGE_PERIOD, RODS
     e = r.env
     r.go(0, -4, stop=0.8)
     r.go(0, 28, stop=0.8)
@@ -378,10 +345,8 @@ def plan_fisch(r: Run) -> None:
     r.wait(2)
 
 
-def plan_garden(r: Run) -> None:
-    """20 Sheckles to start. Talk to Sam at (-22, -24), buy two Carrot seeds (10 each), close. Carrot is hotbar slot 0:
-    equip it, walk to the front of the plot (0, -3), click soil cells (2, 0) at (-2, 2) and (3, 0) at (2, 2). Carrots
-    take 15 s: wait, then walk to each one and Collect. Sell both to Steven at (22, -24): 2 x 18 = 36 > 20."""
+# 20 Sheckles to start. Talk to Sam at (-22, -24), buy two Carrot seeds (10 each), close. Carrot is hotbar slot 0: equip it, walk to the front of the plot (0, -3), click soil cells (2, 0) at (-2, 2) and (3, 0) at (2, 2). Carrots take 15 s: wait, then walk to each one and Collect. Sell both to Steven at (22, -24): 2 x 18 = 36 > 20
+def plan_garden(r):
     e = r.env
     r.go(-22, -25.5, stop=1.5)
     r.prompt("_open")
@@ -409,10 +374,8 @@ def plan_garden(r: Run) -> None:
     r.wait(2)
 
 
-def plan_adoptme(r: Run) -> None:
-    """The pet's first need here is "hungry" (t=4 s). Map → teleport to the Pizza Shop, click the counter, pick an
-    Apple (2 Bucks) → Buy, Backpack → Apple to hold it, click the pet → "Use", and stay while it eats. Pop-ups
-    (daily reward, offers) get closed whenever they show up, since they block every other click."""
+# the pet's first need here is "hungry" (t=4 s). Map → teleport to the Pizza Shop, click the counter, pick an Apple (2 Bucks) → Buy, Backpack → Apple to hold it, click the pet → "Use", and stay while it eats. Pop-ups (daily reward, offers) get closed whenever they show up, since they block every other click
+def plan_adoptme(r):
     e = r.env
 
     def popups():
@@ -446,11 +409,9 @@ def plan_adoptme(r: Run) -> None:
         r.wait(1)
 
 
-def plan_brainrot(r: Run) -> None:
-    """$100 to start. Watch the red carpet for the first brainrot you can afford, walk alongside it and hold E
-    ("Purchase", 0.5 s); it walks itself home to a slot in your base and starts earning. Wait ~10 s, then step on
-    that slot's green pad to collect the cash."""
-    from sim.brainrot import KINDS
+# $100 to start. Watch the red carpet for the first brainrot you can afford, walk alongside it and hold E ("Purchase", 0.5 s); it walks itself home to a slot in your base and starts earning. Wait ~10 s, then step on that slot's green pad to collect the cash
+def plan_brainrot(r):
+    from baconhead.sim.brainrot import KINDS
     e = r.env
     bought = None
     for _ in range(600):
@@ -493,7 +454,7 @@ PLANS = {
 }
 
 
-def make(game: str, video: bool = False) -> dict:
+def make(game, video=False):
     kw, goal, check, plan = PLANS[game]
     r = Run(game, kw)
     plan(r)
@@ -507,17 +468,17 @@ def make(game: str, video: bool = False) -> dict:
     return out
 
 
-def replay(gold: dict):
+def replay(gold):
     env = sim.make(gold["game"], seed=gold["seed"], max_steps=10 ** 9, **gold["kw"])
     for text in gold["inputs"]:
         env.step(decode(text, env.cursor)[0][0])
     return env
 
 
-def render_video(game: str, texts: list[str], kw: dict, out: str = OUT, seed: int | None = None, name: str | None = None) -> str:
+def render_video(game, texts, kw, out=OUT, seed=None, name=None):
     import subprocess
-    from model.vlm import OBS_H, OBS_W
-    from sim.render import best_device, render
+    from baconhead.model.vlm import OBS_H, OBS_W
+    from baconhead.sim.render import best_device, render
     env, dev = sim.make(game, seed=SEED if seed is None else seed, max_steps=10 ** 9, **kw), best_device()
     path = os.path.join(out, (name or game) + ".mp4")
     ff = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{OBS_W}x{OBS_H}",

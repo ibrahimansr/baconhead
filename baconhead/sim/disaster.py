@@ -1,25 +1,9 @@
-"""Natural Disaster Survival: wait in the sky lobby, get dropped on an island, survive whatever hits it.
-
-Round loop like the real game: ~10 s lobby → teleport to the map → "Disaster in 5" → a disaster is announced
-at the top of the screen and runs ~50 s → survivors get a Win and everyone goes back to the lobby. Dying puts
-you in the lobby until the next round. Each disaster has its own right answer:
-
-  Flash Flood    water rises to ~14 studs; head underwater drowns you        → get onto a roof or the hill
-  Meteor Shower  meteors land on red warning rings; impact kills; roofs block → go indoors
-  Acid Rain      burns you whenever nothing is overhead (raycast up)          → go indoors
-  Sandstorm      wind shoves you and sand burns you outdoors                  → go indoors
-  Tornado        a wandering funnel flings and hurts anyone near it           → keep far away
-  Earthquake     wall and roof parts break loose and fall; getting hit hurts  → stand in the open
-"""
-
-from __future__ import annotations
-
 import math
 
 import numpy as np
 
-from core.actions import Action
-from sim.core import DT, Env, Humanoid, Room, avatar_boxes, health_hud, npc_walk, route
+from baconhead.core.actions import Action
+from baconhead.sim.core import DT, Env, Humanoid, Room, avatar_boxes, health_hud, npc_walk, route
 
 LOBBY = np.array([0.0, 120.0, 0.0])        # the floating lobby, well above the map
 LOBBY_S, PRE_S, DISASTER_S, END_S = 10.0, 5.0, 50.0, 3.0
@@ -45,9 +29,9 @@ N_NPC = 4
 class NaturalDisaster(Env):
     name = "disaster"
     train_steps = 3000
-    eval_kw: dict = {}
+    eval_kw = {}
 
-    def build(self) -> None:
+    def build(self):
         r, w = self.rng, self.world
         self.max_steps = int(self.kw.get("max_steps", 3000))
         w.add((0, -0.5, 0), (200, 1, 200), (0.36, 0.62, 0.3))                         # the island
@@ -82,9 +66,9 @@ class NaturalDisaster(Env):
         self.round = 0
         self.wins = 0
         self.water_y = -100.0
-        self.meteors: list[dict] = []
-        self.falling: dict[int, float] = {}       # part → fall speed, during earthquakes
-        self.hit_by: set = set()
+        self.meteors = []
+        self.falling = {}       # part → fall speed, during earthquakes
+        self.hit_by = set()
         self.tornado = np.zeros(3)
         self.tornado_goal = np.zeros(3)
         self.drops = []
@@ -125,7 +109,7 @@ class NaturalDisaster(Env):
     def _all(self):
         return [self.player] + self.npcs
 
-    def _spawn_on_map(self, h: Humanoid):
+    def _spawn_on_map(self, h):
         a = self.rng.uniform(0, 2 * math.pi)
         h.pos = np.array([math.cos(a) * 20, 0.1, math.sin(a) * 20])
         h.vel[:] = 0
@@ -170,7 +154,7 @@ class NaturalDisaster(Env):
                     h.vel[:] = 0
                     h.health = 100.0
 
-    def on_substep(self) -> None:
+    def on_substep(self):
         self.phase_t += DT
         dur = {"lobby": LOBBY_S, "pre": PRE_S, "disaster": DISASTER_S, "end": END_S}[self.phase]
         if self.phase_t >= dur:
@@ -181,16 +165,16 @@ class NaturalDisaster(Env):
         if self.steps >= self.max_steps:
             self.done = True
 
-    def on_death(self) -> None:
+    def on_death(self):
         self.reward -= 1.0
         self.in_round = False
 
     # ── hazards ──
-    def _covered(self, h: Humanoid) -> bool:
+    def _covered(self, h):
         t, _ = self.world.raycast(h.pos + [0, 5.2, 0], np.array([0.0, 1.0, 0.0]), max_t=40, mask=self.world.collide)
         return math.isfinite(t)
 
-    def _hurt(self, h: Humanoid, amount: float, why: str):
+    def _hurt(self, h, amount, why):
         if h is self.player:
             self.damage(amount, why)
         elif h.alive:
@@ -288,8 +272,8 @@ class NaturalDisaster(Env):
                 h.alive, h.dead_t = False, self.t
 
     # ── where's safe ──
-    def _goal(self, h: Humanoid):
-        """(kind, point) a sensible player heads for right now."""
+    # (kind, point) a sensible player heads for right now
+    def _goal(self, h):
         p, d = h.pos, self.disaster
         if d is None:
             return ("walk", p.copy())
@@ -312,8 +296,8 @@ class NaturalDisaster(Env):
         far = lambda q: min(np.hypot(q[0] - b["cx"], q[2] - b["cz"]) for b in self.buildings)
         return ("point", min([q for q in self.opens if far(q) > 25] or self.opens, key=lambda q: np.linalg.norm((q - p)[[0, 2]])))
 
-    def _next(self, h: Humanoid, goal):
-        """The next point to walk at for a goal, handling doors, stairs, and walking around buildings."""
+    # the next point to walk at for a goal, handling doors, stairs, and walking around buildings
+    def _next(self, h, goal):
         kind, g = goal
         p = h.pos
         if kind == "indoors":
@@ -342,8 +326,8 @@ class NaturalDisaster(Env):
             return route(p, g, self.rooms)
         return self._around(p, g)
 
+    # straight at g unless a building is in the way; then via the best corner of its footprint
     def _around(self, p, g):
-        """Straight at g unless a building is in the way; then via the best corner of its footprint."""
         for b in sorted(self.buildings, key=lambda b: np.hypot(b["cx"] - p[0], b["cz"] - p[2])):
             x0, x1 = b["cx"] - b["sx"] / 2 - 1.5, b["xs"] + 2.5
             z0, z1 = b["cz"] - b["sz"] / 2 - 1.5, b["cz"] + b["sz"] / 2 + 1.5
@@ -361,7 +345,7 @@ class NaturalDisaster(Env):
                                                   np.linalg.norm((c - p)[[0, 2]]) + np.linalg.norm((g - c)[[0, 2]])))
         return np.asarray(g, float)
 
-    def _safe(self, h: Humanoid) -> bool:
+    def _safe(self, h):
         d = self.disaster
         if d is None:
             return True
@@ -375,7 +359,7 @@ class NaturalDisaster(Env):
         return min(np.hypot(p[0] - b["cx"], p[2] - b["cz"]) for b in self.buildings) > 20
 
     # ── interface ──
-    def expert(self) -> Action:
+    def expert(self):
         p = self.player
         if not p.alive:
             self.say("you died, wait to respawn in the lobby")
@@ -392,10 +376,10 @@ class NaturalDisaster(Env):
                      "disaster incoming, wait for it to be announced" if self.phase == "pre" else "round is over, wait to go back to the lobby")
             return Action(cursor=self.cursor)
         idle = "disaster incoming, wait for it to be announced" if self.phase == "pre" else "round is over, wait to go back to the lobby"
-        self.say(GO["flood_" + goal[0]] if self.disaster == "flood" else GO.get(self.disaster, idle))   # None: between disasters
+        self.say(GO["flood_" + goal[0]] if self.disaster == "flood" else GO.get(self.disaster, idle))   # none: between disasters
         return self.steer_to(nxt, stop_dist=1.0)
 
-    def potential(self) -> float:
+    def potential(self):
         p = self.player
         if not p.alive or self.disaster is None:
             return 0.0
@@ -404,14 +388,14 @@ class NaturalDisaster(Env):
         dist = float(np.linalg.norm((self.goal - p.pos)[[0, 2]])) if self.goal is not None else 0.0
         return 0.5 * p.health / 100 + 0.5 * self._safe(p) - 0.003 * dist
 
-    def score(self) -> float:
+    def score(self):
         return float(self.wins)
 
-    def info(self) -> dict:
+    def info(self):
         return dict(wins=self.wins, rounds=self.round, phase=self.phase, disaster=self.disaster,
                     health=round(self.player.health), deaths=self.deaths)
 
-    def scene_theme(self) -> dict:
+    def scene_theme(self):
         d, t = self.disaster, dict(self.theme)
         if d == "acid":
             t.update(sky_top=np.array([0.35, 0.5, 0.25]), sky_hor=np.array([0.55, 0.7, 0.4]), sun_k=0.5, fog=250)
@@ -423,7 +407,7 @@ class NaturalDisaster(Env):
             t.update(sky_top=np.array([0.35, 0.2, 0.2]), sky_hor=np.array([0.75, 0.45, 0.3]), sun_k=0.6)
         return t
 
-    def dynamic_boxes(self) -> list:
+    def dynamic_boxes(self):
         out = []
         for h in self.npcs:
             if h.alive:
@@ -442,7 +426,7 @@ class NaturalDisaster(Env):
             out += [((x, y, z), (0.12, 1.2, 0.12), 0.0, col, 1) for x, y, z in self.drops]
         return out
 
-    def hud(self) -> list:
+    def hud(self):
         els = [dict(kind="leaderboard", cols=["Wins"], rows=[["You", self.wins]] + [[f"Player{k + 2}", 0] for k in range(N_NPC)])]
         if self.phase == "lobby":
             msg = f"Intermission  {max(0, LOBBY_S - self.phase_t):.0f}"
@@ -459,8 +443,8 @@ class NaturalDisaster(Env):
         return els + health_hud(self.player.health)
 
 
-def _seg_hits_rect(a, b, x0, x1, z0, z1) -> bool:
-    """Does the xz segment a→b cross the rectangle? Slab test on the segment's parameter."""
+# does the xz segment a→b cross the rectangle? Slab test on the segment's parameter
+def _seg_hits_rect(a, b, x0, x1, z0, z1):
     ax, az, dx, dz = a[0], a[2], b[0] - a[0], b[2] - a[2]
     lo, hi = 0.0, 1.0
     for o, d, mn, mx in ((ax, dx, x0, x1), (az, dz, z0, z1)):
@@ -479,7 +463,7 @@ if __name__ == "__main__":
     import pickle
     import time
 
-    from core.actions import KEYS
+    from baconhead.core.actions import KEYS
     TICKS = 2400   # 4 minutes: ~3.5 rounds
     for seed in range(4):
         env = NaturalDisaster(seed=seed, max_steps=TICKS)
