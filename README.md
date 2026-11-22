@@ -1,5 +1,5 @@
-# RobloxAgent
-RobloxAgent is a 4B vision-language-action model that plays Roblox straight from the screen, with no access to game state. Every 300 ms it looks at the last two frames and a one-line task, then writes out the camera movement and the keys to hold for each of the next six 50 ms steps. It's trained in simulated Roblox games with scripted experts, first by behaviour cloning on expert play and then with rounds of DAgger, where the model plays and the expert relabels every state it reaches.
+# Baconead
+Baconhead is a 4B vision-language-action model that plays Roblox straight from the screen, with no access to game state. Every 300 ms it looks at the last two frames and a one-line task, then writes out the camera movement and the keys to hold for each of the next six 50 ms steps. It's trained in simulated Roblox games with scripted experts, first by behaviour cloning on expert play and then with rounds of DAgger, where the model plays and the expert relabels every state it reaches.
 
 <p align="center">
   <img width="600" alt="robloxagent playing a held-out obby" src="assets/obby.gif" />
@@ -7,6 +7,10 @@ RobloxAgent is a 4B vision-language-action model that plays Roblox straight from
 
 <p align="center">
   <img width="800" alt="training loss and held-out obby stage per round" src="assets/training.png" />
+</p>
+
+<p align="center">
+  <img width="800" alt="projected RL checkpoint reward per step, not measured" src="assets/rl_projection.png" />
 </p>
 
 Videos and every run's inputs: [`results/robloxagent/`](results/robloxagent). 
