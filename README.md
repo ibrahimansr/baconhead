@@ -9,6 +9,10 @@ RobloxAgent is a 4B vision-language-action model that plays Roblox straight from
   <img width="800" alt="training loss and held-out obby stage per round" src="assets/training.png" />
 </p>
 
+<p align="center">
+  <img width="800" alt="projected RL checkpoint reward per step, not measured" src="assets/rl_projection.png" />
+</p>
+
 Videos and every run's inputs: [`results/robloxagent/`](results/robloxagent). 
 
 ## Run and Train
